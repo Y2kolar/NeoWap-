@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<title>NeoWAP</title>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+<style>
+:root{
+    --bg:#0b0f0d;
+    --panel:#0f1512;
+    --panel2:#13221a;
+    --text:#b7f7c0;
+    --muted:#7aa88a;
+    --accent:#6eff9e;
+    --accent2:#3ddc84;
+    --border:#1f3a2d;
+}
+
+*{
+    box-sizing:border-box;
+    -webkit-tap-highlight-color:transparent;
+}
+
+body{
+    margin:0;
+    overflow:hidden;
+    background:
+        radial-gradient(circle at 20% 10%, rgba(61,220,132,0.08), transparent 40%),
+        radial-gradient(circle at 80% 90%, rgba(61,220,132,0.05), transparent 45%),
+        var(--bg);
+
+    color:var(--text);
+    font-family:monospace;
+}
+
+.noise{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    opacity:0.03;
+    background-image:url("https://grainy-gradients.vercel.app/noise.svg");
+}
+
+.app{
+    position:relative;
+    z-index:2;
+    max-width:480px;
+    height:100vh;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    background:rgba(0,0,0,0.15);
+}
+
+.header{
+    padding:12px 14px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:1px solid rgba(61,220,132,0.12);
+    background:rgba(15,21,18,0.9);
+}
+
+.logo{
+    color:var(--accent);
+    font-size:20px;
+    text-shadow:0 0 10px rgba(110,255,158,0.3);
+}
+
+.back{
+    font-size:14px;
+    color:var(--muted);
+    cursor:pointer;
+}
+
+.status{
+    padding:8px 14px;
+    color:var(--muted);
+    font-size:12px;
+    line-height:1.5;
+    border-bottom:1px solid rgba(61,220,132,0.08);
+    background:rgba(15,21,18,0.65);
+}
+
+.content{
+    flex:1;
+    overflow-y:auto;
+    padding:12px;
+    padding-bottom:160px;
+}
+
+.screen{
+    display:none;
+}
+
+.screen.active{
+    display:block;
+}
+
+.card{
+    background:rgba(15,21,18,0.8);
+    border:1px solid rgba(61,220,132,0.14);
+    border-radius:14px;
+    padding:14px;
+    margin-bottom:12px;
+
+    backdrop-filter:blur(6px);
+
+    box-shadow:
+        inset 0 0 12px rgba(61,220,132,0.03),
+        0 6px 24px rgba(0,0,0,0.3);
+}
+
+.title{
+    color:var(--accent);
+    margin-bottom:8px;
+    font-size:17px;
+}
+
+.subtitle{
+    color:var(--muted);
+    font-size:13px;
+    line-height:1.45;
+}
+
+.input{
+    width:100%;
+    padding:13px;
+    margin-top:10px;
+    background:#0c120f;
+    border:1px solid var(--border);
+    border-radius:10px;
+    color:var(--text);
+    font-size:16px;
+    font-family:monospace;
+}
+
+.input:focus{
+    outline:none;
+    border-color:var(--accent2);
+    box-shadow:0 0 10px rgba(61,220,132,0.12);
+}
+
+.btn{
+    width:100%;
+    margin-top:10px;
+    border:none;
+    border-radius:10px;
+    padding:13px;
+    background:var(--accent2);
+    color:#05110a;
+    font-size:16px;
+    font-weight:bold;
+    font-family:monospace;
+}
+
+.btn.secondary{
+    background:#122019;
+    color:var(--text);
+    border:1px solid var(--border);
+}
+
+.room{
+    cursor:pointer;
+    transition:0.2s;
+}
+
+.room:active{
+    transform:scale(0.98);
+}
+
+.room-name{
+    color:var(--accent);
+    margin-bottom:6px;
+    font-size:16px;
+}
+
+.room-desc{
+    color:var(--muted);
+    font-size:13px;
+    line-height:1.4;
+}
+
+.chat{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+.msg{
+    max-width:85%;
+    padding:10px 12px;
+    border-radius:12px;
+    background:rgba(15,21,18,0.82);
+    border:1px solid rgba(61,220,132,0.12);
+    line-height:1.45;
+    word-wrap:break-word;
+}
+
+.msg.me{
+    align-self:flex-end;
+    background:rgba(19,34,26,0.96);
+}
+
+.msg.system{
+    max-width:100%;
+    align-self:center;
+    color:var(--muted);
+    text-align:center;
+    font-size:12px;
+}
+
+.nick{
+    color:var(--accent);
+    font-size:12px;
+    margin-bottom:5px;
+}
+
+.input-bar{
+    position:fixed;
+    left:50%;
+    transform:translateX(-50%);
+    bottom:56px;
+
+    width:100%;
+    max-width:480px;
+
+    padding:10px;
+    background:linear-gradient(to top, rgba(11,15,13,0.98), rgba(11,15,13,0.8));
+
+    border-top:1px solid rgba(61,220,132,0.08);
+
+    display:none;
+}
+
+.input-bar.active{
+    display:block;
+}
+
+.send-row{
+    display:flex;
+    gap:8px;
+}
+
+.send-row input{
+    flex:1;
+    margin:0;
+}
+
+.send-btn{
+    width:90px;
+    margin:0;
+}
+
+.nav{
+    position:fixed;
+    left:50%;
+    transform:translateX(-50%);
+    bottom:0;
+
+    width:100%;
+    max-width:480px;
+    height:56px;
+
+    display:flex;
+    justify-content:space-around;
+    align-items:center;
+
+    background:rgba(15,21,18,0.95);
+
+    border-top:1px solid rgba(61,220,132,0.1);
+}
+
+.nav-item{
+    color:var(--muted);
+    font-size:11px;
+    text-align:center;
+}
+
+.error{
+    margin-top:10px;
+    color:#ff8b8b;
+    font-size:13px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="noise"></div>
+
+<div class="app">
+
+    <div class="header">
+        <div class="back" onclick="goHome()">← назад</div>
+        <div class="logo">NeoWAP</div>
+        <div id="topUser" style="font-size:12px;color:var(--muted);">offline</div>
+    </div>
+
+    <div class="status" id="statusText">
+        ● Поздняя волна интернета · 2007<br>
+        Тихий чат для тех, кто помнит старую сеть.
+    </div>
+
+    <div class="content">
+
+        <!-- LOGIN -->
+
+        <div id="loginScreen" class="screen active">
+
+            <div class="card">
+
+                <div class="title">Вход</div>
+
+                <div class="subtitle">
+                    Старый формат.<br>
+                    Ник и пароль.<br><br>
+
+                    Если ник свободен — он создастся автоматически.
+                </div>
+
+                <input id="nickInput" class="input" placeholder="ник">
+                <input id="passInput" class="input" type="password" placeholder="пароль">
+
+                <button class="btn" onclick="login()">Войти</button>
+
+                <div class="error" id="loginError"></div>
+
+            </div>
+
+        </div>
+
+        <!-- ROOMS -->
+
+        <div id="roomsScreen" class="screen">
+
+            <div id="rooms"></div>
+
+            <div class="card">
+
+                <div class="title">Закрытые комнаты</div>
+
+                <div class="subtitle">
+                    Позже тут появится создание приватной комнаты за 10⭐
+                </div>
+
+                <button class="btn secondary" onclick="alert('Позже добавим')">
+                    Создать
+                </button>
+
+            </div>
+
+        </div>
+
+        <!-- CHAT -->
+
+        <div id="chatScreen" class="screen">
+
+            <div class="chat" id="chat"></div>
+
+        </div>
+
+        <!-- PROFILE -->
+
+        <div id="profileScreen" class="screen">
+
+            <div class="card">
+
+                <div class="title">Профиль</div>
+
+                <div class="subtitle" id="profileText"></div>
+
+                <button class="btn secondary" onclick="logout()">
+                    Выйти
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- INPUT -->
+
+    <div class="input-bar" id="inputBar">
+
+        <div class="send-row">
+
+            <input
+                id="msgInput"
+                class="input"
+                placeholder="Напиши что-нибудь..."
+                onkeydown="if(event.key==='Enter')sendMessage()"
+            >
+
+            <button class="btn send-btn" onclick="sendMessage()">
+                OK
+            </button>
+
+        </div>
+
+    </div>
+
+    <!-- NAV -->
+
+    <div class="nav">
+
+        <div class="nav-item" onclick="goHome()">
+            🏠<br>Комнаты
+        </div>
+
+        <div class="nav-item" onclick="goChat()">
+            💬<br>Чат
+        </div>
+
+        <div class="nav-item" onclick="goProfile()">
+            👤<br>Профиль
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+
+const SERVER_URL = "https://neowap-production.up.railway.app";
+
+let socket = null;
+let currentUser = null;
+let currentRoom = null;
+
+const rooms = [
+    {
+        id:"main",
+        name:"Главная",
+        desc:"Общий ламповый чат."
+    },
+    {
+        id:"night",
+        name:"Ночной двор",
+        desc:"Для поздних разговоров."
+    },
+    {
+        id:"nostalgia",
+        name:"2007 memories",
+        desc:"Аська, Nokia, старые сайты."
+    },
+    {
+        id:"quiet",
+        name:"Тихая комната",
+        desc:"Для тех кто просто хочет посидеть."
+    }
+];
+
+function showScreen(id){
+
+    document.querySelectorAll(".screen")
+        .forEach(s=>s.classList.remove("active"));
+
+    document.getElementById(id)
+        .classList.add("active");
+
+    if(id === "chatScreen" && currentRoom){
+        document.getElementById("inputBar")
+            .classList.add("active");
+    }else{
+        document.getElementById("inputBar")
+            .classList.remove("active");
+    }
+}
+
+function renderRooms(){
+
+    let html = "";
+
+    rooms.forEach(room=>{
+
+        html += `
+            <div class="card room" onclick="enterRoom('${room.id}')">
+
+                <div class="room-name">
+                    ${room.name}
+                </div>
+
+                <div class="room-desc">
+                    ${room.desc}
+                </div>
+
+            </div>
+        `;
+
+    });
+
+    document.getElementById("rooms").innerHTML = html;
+}
+
+function login(){
+
+    const nick = document.getElementById("nickInput").value.trim();
+    const pass = document.getElementById("passInput").value.trim();
+
+    const error = document.getElementById("loginError");
+
+    error.innerText = "";
+
+    if(nick.length < 3){
+        error.innerText = "Минимум 3 символа.";
+        return;
+    }
+
+    if(pass.length < 4){
+        error.innerText = "Минимум 4 символа.";
+        return;
+    }
+
+    localStorage.setItem("neowap_nick", nick);
+    localStorage.setItem("neowap_pass", pass);
+
+    currentUser = {
+        nick:nick,
+        messages:Number(localStorage.getItem("neowap_messages") || 0)
+    };
+
+    afterLogin();
+}
+
+function afterLogin(){
+
+    document.getElementById("topUser")
+        .innerText = currentUser.nick;
+
+    renderRooms();
+
+    connectSocket();
+
+    showScreen("roomsScreen");
+}
+
+function connectSocket(){
+
+    if(socket) return;
+
+    socket = io(SERVER_URL, {
+        transports:["websocket","polling"]
+    });
+
+    socket.on("connect", ()=>{
+
+        console.log("connected");
+
+    });
+
+    socket.on("message", (data)=>{
+
+        if(data.user === currentUser.nick) return;
+
+        addMessage(data.user, data.text, false);
+
+    });
+
+    socket.on("system", (text)=>{
+
+        addSystem(text);
+
+    });
+
+}
+
+function enterRoom(roomId){
+
+    const room = rooms.find(r=>r.id === roomId);
+
+    if(!room) return;
+
+    currentRoom = room;
+
+    document.getElementById("chat").innerHTML = "";
+
+    showScreen("chatScreen");
+
+    document.getElementById("statusText").innerHTML =
+        `● ${room.name}<br>${room.desc}`;
+
+    addSystem("Ты вошёл в комнату.");
+
+    socket.emit("joinRoom", room.id);
+
+    setTimeout(()=>{
+
+        addMessage(
+            "Sabrina",
+            "Можно просто читать. Не обязательно сразу что-то говорить.",
+            false
+        );
+
+    },700);
+
+}
+
+function sendMessage(){
+
+    const input = document.getElementById("msgInput");
+
+    const text = input.value.trim();
+
+    if(!text) return;
+
+    input.value = "";
+
+    addMessage(currentUser.nick, text, true);
+
+    currentUser.messages++;
+
+    localStorage.setItem(
+        "neowap_messages",
+        currentUser.messages
+    );
+
+    socket.emit("message", {
+        room:currentRoom.id,
+        user:currentUser.nick,
+        text:text
+    });
+
+    maybeSabrina(text);
+}
+
+function addMessage(user, text, me){
+
+    const chat = document.getElementById("chat");
+
+    const div = document.createElement("div");
+
+    div.className = "msg" + (me ? " me" : "");
+
+    div.innerHTML = `
+        <div class="nick">${escapeHtml(user)}</div>
+        <div>${escapeHtml(text)}</div>
+    `;
+
+    chat.appendChild(div);
+
+    scrollChat();
+}
+
+function addSystem(text){
+
+    const chat = document.getElementById("chat");
+
+    const div = document.createElement("div");
+
+    div.className = "msg system";
+
+    div.innerText = text;
+
+    chat.appendChild(div);
+
+    scrollChat();
+}
+
+function scrollChat(){
+
+    const content = document.querySelector(".content");
+
+    setTimeout(()=>{
+        content.scrollTop = content.scrollHeight;
+    },50);
+}
+
+function maybeSabrina(text){
+
+    if(Math.random() > 0.82){
+
+        setTimeout(()=>{
+
+            const replies = [
+                "Иногда проще говорить с незнакомцами.",
+                "Тут можно быть собой.",
+                "Поздней ночью люди честнее.",
+                "Многие здесь тоже просто устали."
+            ];
+
+            addMessage(
+                "Sabrina",
+                replies[Math.floor(Math.random()*replies.length)],
+                false
+            );
+
+        },1200);
+
+    }
+}
+
+function goHome(){
+
+    if(!currentUser){
+        showScreen("loginScreen");
+        return;
+    }
+
+    currentRoom = null;
+
+    document.getElementById("statusText").innerHTML =
+        "● Поздняя волна интернета · 2007<br>Тихий чат для тех, кто помнит старую сеть.";
+
+    showScreen("roomsScreen");
+}
+
+function goChat(){
+
+    if(currentRoom){
+        showScreen("chatScreen");
+    }
+}
+
+function goProfile(){
+
+    if(!currentUser) return;
+
+    const status =
+        currentUser.messages >= 1000
+        ? "местный житель"
+        : "новенький";
+
+    document.getElementById("profileText").innerHTML = `
+        Ник: <b>${escapeHtml(currentUser.nick)}</b><br>
+        Сообщений: <b>${currentUser.messages}</b><br>
+        Статус: <b>${status}</b>
+    `;
+
+    showScreen("profileScreen");
+}
+
+function logout(){
+
+    localStorage.removeItem("neowap_nick");
+    localStorage.removeItem("neowap_pass");
+    localStorage.removeItem("neowap_messages");
+
+    location.reload();
+}
+
+function escapeHtml(str){
+
+    return String(str)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;");
+}
+
+window.onload = function(){
+
+    try{
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+    }catch(e){}
+
+    const nick = localStorage.getItem("neowap_nick");
+    const pass = localStorage.getItem("neowap_pass");
+
+    if(nick && pass){
+
+        currentUser = {
+            nick:nick,
+            messages:Number(localStorage.getItem("neowap_messages") || 0)
+        };
+
+        afterLogin();
+
+    }else{
+
+        showScreen("loginScreen");
+
+    }
+
+};
+
+</script>
+
+</body>
+</html>
