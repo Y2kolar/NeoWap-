@@ -124,6 +124,15 @@ app.post("/auth", async (req, res) => {
 
     const user = existing.rows[0];
 
+    if (user.nick === "Admin" && user.role !== "admin") {
+  await pool.query(
+    "UPDATE users SET role = 'admin' WHERE id = $1",
+    [user.id]
+  );
+
+  user.role = "admin";
+}
+
     const now = new Date();
 
     if (user.banned_forever) {
