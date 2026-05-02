@@ -6,39 +6,72 @@ const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-    cors: {
-        origin: "*"
-    }
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
 });
 
-let rooms = {}; // комнаты
+// Проверка сервера в браузере
+app.get("/", (req, res) => {
+  res.send("NeoWAP server online");
+});
+
+// Комнаты и количество людей
+const rooms = {};
 
 io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
 
-    console.log("user connected:", socket.id);
+  socket.on("joinRoom", (room) => {
+    if (!room) return;
 
-    // вход в комнату
-    socket.on("joinRoom", (room) => {
-        socket.join(room);
+    // выйти из старых комнат, кроме собственной socket.id
+    for (const r of socket.rooms) {
+      if (r !== socket.id) {
+        socket.leave(r);
 
-        if (!rooms[room]) rooms[room] = 0;
-        rooms[room]++;
+        if (rooms[r]) {
+          rooms[r] = Math.max(0, rooms[r] - 1);
+          io.to(r).emit("system", `👤 Кто-то вышел. Сейчас в комнате: ${rooms[r]}`);
+        }
+      }
+    }
 
-        io.to(room).emit("system", `👤 Пользователь вошёл (${rooms[room]})`);
+    socket.join(room);
+    socket.currentRoom = room;
+
+    if (!rooms[room]) rooms[room] = 0;
+    rooms[room]++;
+
+    io.to(room).emit("system", `👤 Кто-то вошёл. Сейчас в комнате: ${rooms[room]}`);
+  });
+
+  socket.on("message", (data) => {
+    if (!data || !data.room || !data.text || !data.user) return;
+
+    io.to(data.room).emit("message", {
+      user: data.user,
+      text: data.text,
+      room: data.room,
+      time: Date.now()
     });
+  });
 
-    // сообщение
-    socket.on("message", ({ room, text, user }) => {
-        io.to(room).emit("message", { user, text });
-    });
+  socket.on("disconnect", () => {
+    const room = socket.currentRoom;
 
-    // выход
-    socket.on("disconnect", () => {
-        console.log("user disconnected");
-    });
+    if (room && rooms[room]) {
+      rooms[room] = Math.max(0, rooms[room] - 1);
+      io.to(room).emit("system", `👤 Кто-то вышел. Сейчас в комнате: ${rooms[room]}`);
+    }
 
+    console.log("User disconnected:", socket.id);
+  });
 });
 
-server.listen(3000, () => {
-    console.log("Server running");
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, () => {
+  console.log(`NeoWAP server running on port ${PORT}`);
 });
