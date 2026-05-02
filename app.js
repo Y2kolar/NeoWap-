@@ -18,7 +18,9 @@ const rooms = [
 
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
+
+  const screen = document.getElementById(id);
+  if (screen) screen.classList.add("active");
 
   if (id === "chatScreen" && currentRoom) {
     document.getElementById("inputBar").classList.add("active");
@@ -129,7 +131,10 @@ async function afterLogin() {
 }
 
 function connectSocket() {
-  if (socket) return;
+  if (socket) {
+    if (!socket.connected) socket.connect();
+    return;
+  }
 
   socket = io(SERVER_URL, {
     transports: ["websocket", "polling"]
@@ -182,22 +187,7 @@ function connectSocket() {
     if (!data || !currentUser) return;
 
     if (data.user === currentUser.nick) {
-      if (typeof data.messages_count === "number") {
-        currentUser.messages = data.messages_count;
-      }
-
-      if (data.active_status) {
-        currentUser.active_status = data.active_status;
-      }
-
-      if (data.trust_level) {
-        currentUser.trust_level = data.trust_level;
-      }
-
-      if (typeof data.trust_score === "number") {
-        currentUser.trust_score = data.trust_score;
-      }
-
+      updateCurrentUserFromMessage(data);
       return;
     }
 
@@ -209,8 +199,32 @@ function connectSocket() {
     );
   });
 
+  socket.on("messageSaved", data => {
+    if (!data || !currentUser) return;
+
+    if (data.user === currentUser.nick) {
+      updateCurrentUserFromMessage(data);
+    }
+  });
+
   socket.on("system", text => {
     showSystem(text);
+
+    if (
+      currentUser &&
+      currentUser.role === "admin" &&
+      typeof text === "string" &&
+      (text.includes("🚩") || text.toLowerCase().includes("жалоба"))
+    ) {
+      appendAdminLog(text);
+    }
+  });
+
+  socket.on("adminPrivateReport", data => {
+    const text = data?.text || "🚩 Новая жалоба в приватной комнате.";
+
+    appendAdminLog(text);
+    appendPrivateLog(text);
   });
 
   socket.on("privateInvite", invite => {
@@ -261,6 +275,11 @@ function connectSocket() {
     appendPrivateLog("Ты покинул приватную комнату " + data.code + ".");
     appendPrivateRoomLog("Ты покинул эту комнату навсегда.");
 
+    if (data && data.code) {
+      delete myPrivateRooms[data.code];
+      renderMyPrivateRooms();
+    }
+
     currentRoom = null;
     currentPrivateCode = null;
 
@@ -276,6 +295,11 @@ function connectSocket() {
     appendPrivateLog("Приватная комната " + data.code + " закрыта.");
     appendPrivateRoomLog("Комната закрыта владельцем.");
 
+    if (data && data.code) {
+      delete myPrivateRooms[data.code];
+      renderMyPrivateRooms();
+    }
+
     currentRoom = null;
     currentPrivateCode = null;
 
@@ -290,12 +314,24 @@ function connectSocket() {
   socket.on("privateReportResult", text => {
     appendPrivateRoomLog(text);
   });
-  socket.on("adminPrivateReport", data => {
-  const text = data?.text || "Новая жалоба в приватной комнате.";
+}
 
-  appendAdminLog(text);
-  appendPrivateLog(text);
-});
+function updateCurrentUserFromMessage(data) {
+  if (typeof data.messages_count === "number") {
+    currentUser.messages = data.messages_count;
+  }
+
+  if (data.active_status) {
+    currentUser.active_status = data.active_status;
+  }
+
+  if (data.trust_level) {
+    currentUser.trust_level = data.trust_level;
+  }
+
+  if (typeof data.trust_score === "number") {
+    currentUser.trust_score = data.trust_score;
+  }
 }
 
 function showSystem(text) {
@@ -346,7 +382,9 @@ function renderMyPrivateRooms() {
   const card = document.getElementById("myPrivateRoomsCard");
   const box = document.getElementById("myPrivateRooms");
 
-  const roomsList = Object.values(myPrivateRooms);
+  if (!card || !box) return;
+
+  const roomsList = Object.values(myPrivateRooms || {});
 
   if (!roomsList.length) {
     card.style.display = "none";
@@ -359,14 +397,26 @@ function renderMyPrivateRooms() {
   let html = "";
 
   roomsList.forEach(room => {
+    const rawCode = String(room.code || "").trim();
+    const code = escapeHtml(rawCode);
+    const roleRaw = String(room.role || "member").trim().toLowerCase();
+    const role = escapeHtml(roleRaw);
+    const creator = escapeHtml(room.created_by || "unknown");
+
+    const actionButton = roleRaw === "owner"
+      ? `<button class="btn danger" onclick="closePrivateFromList('${code}')">Закрыть комнату</button>`
+      : `<button class="btn danger" onclick="leavePrivateFromList('${code}')">Покинуть навсегда</button>`;
+
     html += `
       <div class="card">
-        <div class="title">🔒 ${escapeHtml(room.code)}</div>
+        <div class="title">🔒 ${code}</div>
         <div class="subtitle">
-          Создал: ${escapeHtml(room.created_by || "unknown")}<br>
-          Твоя роль: ${escapeHtml(room.role || "member")}
+          Создал: ${creator}<br>
+          Твоя роль: ${role}
         </div>
-        <button class="btn secondary" onclick="joinPrivateByCodeValue('${escapeHtml(room.code)}')">Войти</button>
+
+        <button class="btn secondary" onclick="joinPrivateByCodeValue('${code}')">Войти</button>
+        ${actionButton}
       </div>
     `;
   });
@@ -451,6 +501,19 @@ function showInvitePopup(invite) {
   popup.classList.add("active");
 }
 
+function togglePrivateCreateBlock() {
+  const block = document.getElementById("privateCreateBlock");
+  const btn = document.getElementById("privateCreateToggle");
+
+  if (!block || !btn) return;
+
+  const opened = block.classList.toggle("active");
+
+  btn.innerText = opened
+    ? "Скрыть управление приватками"
+    : "Открыть управление приватками";
+}
+
 function createPrivateInvite() {
   const target = document.getElementById("privateTarget").value.trim();
   const code = document.getElementById("privateCodeForInvite").value.trim();
@@ -461,7 +524,8 @@ function createPrivateInvite() {
   }
 
   if (!socket || !socket.connected) {
-    appendPrivateLog("Сервер ещё не подключён.");
+    connectSocket();
+    appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
     return;
   }
 
@@ -478,17 +542,18 @@ function inviteMoreToCurrentPrivate() {
   const target = document.getElementById("privateInviteMoreNick").value.trim();
 
   if (!target) {
-    addSystem("Укажи ник для приглашения.");
+    appendPrivateRoomLog("Укажи ник для приглашения.");
     return;
   }
 
   if (!currentPrivateCode) {
-    addSystem("Ты сейчас не в приватной комнате.");
+    appendPrivateRoomLog("Ты сейчас не в приватной комнате.");
     return;
   }
 
   if (!socket || !socket.connected) {
-    addSystem("Сервер не подключён.");
+    connectSocket();
+    appendPrivateRoomLog("Сервер подключается. Повтори действие через секунду.");
     return;
   }
 
@@ -498,7 +563,7 @@ function inviteMoreToCurrentPrivate() {
     code: currentPrivateCode
   });
 
-  addSystem("Sabrina: приглашение отправлено для " + target + ".");
+  appendPrivateRoomLog("Приглашение отправляется для " + target + ".");
   document.getElementById("privateInviteMoreNick").value = "";
 }
 
@@ -515,7 +580,8 @@ function joinPrivateByCodeValue(code) {
   }
 
   if (!socket || !socket.connected) {
-    appendPrivateLog("Сервер не подключён.");
+    connectSocket();
+    appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
     return;
   }
 
@@ -527,7 +593,8 @@ function joinPrivateByCodeValue(code) {
 
 function acceptPrivateInvite(code) {
   if (!socket || !socket.connected) {
-    appendPrivateLog("Сервер не подключён.");
+    connectSocket();
+    appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
     return;
   }
 
@@ -541,7 +608,8 @@ function acceptPrivateInvite(code) {
 
 function declinePrivateInvite(code) {
   if (!socket || !socket.connected) {
-    appendPrivateLog("Сервер не подключён.");
+    connectSocket();
+    appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
     return;
   }
 
@@ -596,6 +664,9 @@ async function enterPrivateRoom(roomId, code) {
       code: currentPrivateCode,
       user: currentUser.nick
     });
+  } else {
+    connectSocket();
+    addSystem("Подключаюсь к серверу...");
   }
 }
 
@@ -686,9 +757,35 @@ function sendTyping() {
 
 function sendMessage() {
   const input = document.getElementById("msgInput");
+  if (!input) return;
+
   const text = input.value.trim();
 
-  if (!text || !currentRoom || !currentUser) return;
+  if (!text) return;
+
+  if (!currentUser) {
+    input.value = text;
+    return;
+  }
+
+  if (!currentRoom) {
+    input.value = text;
+    appendPrivateLog("Сначала войди в комнату.");
+    return;
+  }
+
+  if (!socket || !socket.connected) {
+    input.value = text;
+    connectSocket();
+
+    if (document.getElementById("chatScreen")?.classList.contains("active")) {
+      addSystem("Подключаюсь к серверу. Нажми OK ещё раз через секунду.");
+    } else {
+      appendPrivateLog("Подключаюсь к серверу. Повтори действие через секунду.");
+    }
+
+    return;
+  }
 
   input.value = "";
 
@@ -696,24 +793,22 @@ function sendMessage() {
     currentUser.nick,
     text,
     true,
-    currentUser.active_status
+    currentUser.active_status || "No body 🌑"
   );
 
-  if (socket && socket.connected) {
-    socket.emit("message", {
-      room: currentRoom.id,
-      user: currentUser.nick,
-      text: text
-    });
-  } else {
-    addSystem("Сообщение показано у тебя, но сервер не подключён.");
-  }
+  socket.emit("message", {
+    room: currentRoom.id,
+    user: currentUser.nick,
+    text: text
+  });
 
   maybeSabrina(text);
 }
 
 function addMessage(user, text, me, status) {
   const chat = document.getElementById("chat");
+
+  if (!chat) return;
 
   const div = document.createElement("div");
 
@@ -735,6 +830,8 @@ function addMessage(user, text, me, status) {
 function addSystem(text) {
   const chat = document.getElementById("chat");
 
+  if (!chat) return;
+
   const div = document.createElement("div");
 
   div.className = "msg system";
@@ -754,7 +851,7 @@ function scrollChat() {
 }
 
 function maybeSabrina(text) {
-  if (Math.random() > 0.9) {
+  if (Math.random() > 0.92) {
     setTimeout(() => {
       const replies = [
         "Иногда проще говорить с незнакомцами.",
@@ -796,6 +893,10 @@ function goHome() {
 function goChat() {
   if (currentRoom) {
     showScreen("chatScreen");
+
+    if (currentPrivateCode) {
+      document.getElementById("privateTools").classList.add("active");
+    }
   }
 }
 
@@ -873,7 +974,8 @@ function requestPrivateMembers() {
   }
 
   if (!socket || !socket.connected) {
-    appendPrivateRoomLog("Сервер не подключён.");
+    connectSocket();
+    appendPrivateRoomLog("Сервер подключается. Повтори действие через секунду.");
     return;
   }
 
@@ -900,7 +1002,8 @@ function reportPrivateRoom() {
   }
 
   if (!socket || !socket.connected) {
-    appendPrivateRoomLog("Сервер не подключён.");
+    connectSocket();
+    appendPrivateRoomLog("Сервер подключается. Повтори действие через секунду.");
     return;
   }
 
@@ -925,7 +1028,8 @@ function leavePrivateForever() {
   if (!ok) return;
 
   if (!socket || !socket.connected) {
-    appendPrivateRoomLog("Сервер не подключён.");
+    connectSocket();
+    appendPrivateRoomLog("Сервер подключается. Повтори действие через секунду.");
     return;
   }
 
@@ -948,7 +1052,8 @@ function closePrivateRoom() {
   if (!ok) return;
 
   if (!socket || !socket.connected) {
-    appendPrivateRoomLog("Сервер не подключён.");
+    connectSocket();
+    appendPrivateRoomLog("Сервер подключается. Повтори действие через секунду.");
     return;
   }
 
@@ -958,6 +1063,62 @@ function closePrivateRoom() {
   });
 
   appendPrivateRoomLog("Закрываю комнату...");
+}
+
+function leavePrivateFromList(code) {
+  if (!code) return;
+
+  const ok = confirm(
+    "Покинуть приватную комнату " +
+    code +
+    " навсегда? Она исчезнет из твоего списка."
+  );
+
+  if (!ok) return;
+
+  if (!socket || !socket.connected) {
+    connectSocket();
+    appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
+    return;
+  }
+
+  socket.emit("leavePrivateRoomForever", {
+    code: code,
+    user: currentUser.nick
+  });
+
+  appendPrivateLog("Покидаю комнату " + code + "...");
+
+  delete myPrivateRooms[code];
+  renderMyPrivateRooms();
+}
+
+function closePrivateFromList(code) {
+  if (!code) return;
+
+  const ok = confirm(
+    "Закрыть приватную комнату " +
+    code +
+    " для всех? Это действие нельзя отменить."
+  );
+
+  if (!ok) return;
+
+  if (!socket || !socket.connected) {
+    connectSocket();
+    appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
+    return;
+  }
+
+  socket.emit("closePrivateRoom", {
+    code: code,
+    user: currentUser.nick
+  });
+
+  appendPrivateLog("Закрываю комнату " + code + "...");
+
+  delete myPrivateRooms[code];
+  renderMyPrivateRooms();
 }
 
 function getAdminTarget() {
@@ -970,8 +1131,10 @@ function adminEmit(command) {
     return;
   }
 
-  if (!socket) {
+  if (!socket || !socket.connected) {
     connectSocket();
+    appendAdminLog("Сервер подключается. Повтори действие через секунду.");
+    return;
   }
 
   const room = currentRoom ? currentRoom.id : "main";
@@ -1059,19 +1222,6 @@ function appendAdminLog(text) {
   log.scrollTop = log.scrollHeight;
 }
 
-function togglePrivateCreateBlock(){
-  const block = document.getElementById("privateCreateBlock");
-  const btn = document.getElementById("privateCreateToggle");
-
-  if(!block || !btn) return;
-
-  const opened = block.classList.toggle("active");
-
-  btn.innerText = opened
-    ? "Скрыть управление приватками"
-    : "Открыть управление приватками";
-}
-
 function escapeHtml(str) {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -1101,274 +1251,3 @@ window.onload = async function () {
     showScreen("loginScreen");
   }
 };
-/* === NeoWAP PATCH v6: private controls, reports, reconnect === */
-
-if (!window.__NEOWAP_PATCH_V6__) {
-  window.__NEOWAP_PATCH_V6__ = true;
-
-  function ensurePrivateToolsBlock() {
-    const chatScreen = document.getElementById("chatScreen");
-    if (!chatScreen) return;
-
-    let tools = document.getElementById("privateTools");
-
-    if (!tools) {
-      tools = document.createElement("div");
-      tools.id = "privateTools";
-      tools.className = "card private-tools";
-      chatScreen.insertBefore(tools, chatScreen.firstChild);
-    }
-
-    if (tools.dataset.neoToolsPatched === "yes") return;
-
-    tools.innerHTML = `
-      <div class="title">Закрытая комната</div>
-      <div class="subtitle" id="privateRoomInfo"></div>
-
-      <input id="privateInviteMoreNick" class="input" placeholder="пригласить ещё ник">
-      <button class="btn secondary" onclick="inviteMoreToCurrentPrivate()">Пригласить ещё</button>
-
-      <button class="btn secondary" onclick="requestPrivateMembers()">Участники</button>
-
-      <input id="privateReportTarget" class="input" placeholder="ник для жалобы">
-      <input id="privateReportReason" class="input" placeholder="причина жалобы">
-      <button class="btn warn" onclick="reportPrivateRoom()">Пожаловаться</button>
-
-      <button class="btn danger" onclick="leavePrivateForever()">Покинуть навсегда</button>
-      <button class="btn danger" onclick="closePrivateRoom()">Закрыть комнату</button>
-
-      <div class="private-log" id="privateRoomLog">События приватной комнаты будут здесь.</div>
-    `;
-
-    tools.dataset.neoToolsPatched = "yes";
-  }
-
-  function bindNeoPatchSocketEvents() {
-    if (!socket || socket.__neoPatchEventsBound) return;
-
-    socket.__neoPatchEventsBound = true;
-
-    socket.on("adminPrivateReport", data => {
-      const text = data?.text || "🚩 Новая жалоба в приватной комнате.";
-
-      appendAdminLog(text);
-      appendPrivateLog(text);
-    });
-
-    socket.on("system", text => {
-      if (
-        currentUser &&
-        currentUser.role === "admin" &&
-        typeof text === "string" &&
-        (text.includes("🚩") || text.toLowerCase().includes("жалоба"))
-      ) {
-        appendAdminLog(text);
-      }
-    });
-
-    socket.on("privateLeftForever", data => {
-      if (data && data.code) {
-        delete myPrivateRooms[data.code];
-        renderMyPrivateRooms();
-      }
-    });
-
-    socket.on("privateClosed", data => {
-      if (data && data.code) {
-        delete myPrivateRooms[data.code];
-        renderMyPrivateRooms();
-      }
-    });
-  }
-
-  const __neoOldConnectSocket = connectSocket;
-
-  window.connectSocket = connectSocket = function () {
-    if (socket && !socket.connected) {
-      socket.connect();
-    }
-
-    __neoOldConnectSocket();
-
-    bindNeoPatchSocketEvents();
-
-    setTimeout(bindNeoPatchSocketEvents, 300);
-  };
-
-  const __neoOldEnterPrivateRoom = enterPrivateRoom;
-
-  window.enterPrivateRoom = enterPrivateRoom = async function (roomId, code) {
-    ensurePrivateToolsBlock();
-
-    await __neoOldEnterPrivateRoom(roomId, code);
-
-    const tools = document.getElementById("privateTools");
-    const info = document.getElementById("privateRoomInfo");
-    const log = document.getElementById("privateRoomLog");
-
-    if (tools) {
-      tools.classList.add("active");
-    }
-
-    if (info && currentPrivateCode) {
-      info.innerHTML =
-        "Код комнаты: <b>" +
-        escapeHtml(currentPrivateCode) +
-        "</b><br>Можно пригласить ещё людей по нику.";
-    }
-
-    if (log && log.innerText.trim() === "") {
-      log.innerText = "События приватной комнаты будут здесь.";
-    }
-
-    bindNeoPatchSocketEvents();
-  };
-
-  window.sendMessage = sendMessage = function () {
-    const input = document.getElementById("msgInput");
-    const text = input.value.trim();
-
-    if (!text) return;
-
-    if (!currentUser) {
-      input.value = text;
-      return;
-    }
-
-    if (!currentRoom) {
-      input.value = text;
-      appendPrivateLog("Сначала войди в комнату.");
-      return;
-    }
-
-    if (!socket || !socket.connected) {
-      input.value = text;
-      connectSocket();
-
-      if (document.getElementById("chatScreen").classList.contains("active")) {
-        addSystem("Подключаюсь к серверу. Нажми OK ещё раз через секунду.");
-      } else {
-        appendPrivateLog("Подключаюсь к серверу. Повтори действие через секунду.");
-      }
-
-      return;
-    }
-
-    input.value = "";
-
-    addMessage(
-      currentUser.nick,
-      text,
-      true,
-      currentUser.active_status
-    );
-
-    socket.emit("message", {
-      room: currentRoom.id,
-      user: currentUser.nick,
-      text: text
-    });
-
-    maybeSabrina(text);
-  };
-
-  window.renderMyPrivateRooms = renderMyPrivateRooms = function () {
-    const card = document.getElementById("myPrivateRoomsCard");
-    const box = document.getElementById("myPrivateRooms");
-
-    const roomsList = Object.values(myPrivateRooms);
-
-    if (!roomsList.length) {
-      card.style.display = "none";
-      box.innerHTML = "";
-      return;
-    }
-
-    card.style.display = "block";
-
-    let html = "";
-
-    roomsList.forEach(room => {
-      const code = escapeHtml(room.code);
-      const role = escapeHtml(room.role || "member");
-      const creator = escapeHtml(room.created_by || "unknown");
-
-      const actionButton = room.role === "owner"
-        ? `<button class="btn danger" onclick="closePrivateFromList('${code}')">Закрыть комнату</button>`
-        : `<button class="btn danger" onclick="leavePrivateFromList('${code}')">Покинуть навсегда</button>`;
-
-      html += `
-        <div class="card">
-          <div class="title">🔒 ${code}</div>
-          <div class="subtitle">
-            Создал: ${creator}<br>
-            Твоя роль: ${role}
-          </div>
-
-          <button class="btn secondary" onclick="joinPrivateByCodeValue('${code}')">Войти</button>
-          ${actionButton}
-        </div>
-      `;
-    });
-
-    box.innerHTML = html;
-  };
-
-  window.leavePrivateFromList = function (code) {
-    if (!code) return;
-
-    const ok = confirm(
-      "Покинуть приватную комнату " +
-      code +
-      " навсегда? Она исчезнет из твоего списка."
-    );
-
-    if (!ok) return;
-
-    if (!socket || !socket.connected) {
-      connectSocket();
-      appendPrivateLog("Подключаюсь к серверу. Повтори действие через секунду.");
-      return;
-    }
-
-    socket.emit("leavePrivateRoomForever", {
-      code: code,
-      user: currentUser.nick
-    });
-
-    appendPrivateLog("Покидаю комнату " + code + "...");
-
-    delete myPrivateRooms[code];
-    renderMyPrivateRooms();
-  };
-
-  window.closePrivateFromList = function (code) {
-    if (!code) return;
-
-    const ok = confirm(
-      "Закрыть приватную комнату " +
-      code +
-      " для всех? Это действие нельзя отменить."
-    );
-
-    if (!ok) return;
-
-    if (!socket || !socket.connected) {
-      connectSocket();
-      appendPrivateLog("Подключаюсь к серверу. Повтори действие через секунду.");
-      return;
-    }
-
-    socket.emit("closePrivateRoom", {
-      code: code,
-      user: currentUser.nick
-    });
-
-    appendPrivateLog("Закрываю комнату " + code + "...");
-
-    delete myPrivateRooms[code];
-    renderMyPrivateRooms();
-  };
-
-  ensurePrivateToolsBlock();
-}
