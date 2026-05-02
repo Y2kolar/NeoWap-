@@ -319,12 +319,7 @@ body{
   font-size:13px;
 }
 
-.admin-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:8px;
-}
-
+.private-log,
 .admin-log{
   margin-top:10px;
   padding:10px;
@@ -337,18 +332,6 @@ body{
   white-space:pre-wrap;
   max-height:180px;
   overflow:auto;
-}
-
-.private-log{
-  margin-top:10px;
-  padding:10px;
-  border:1px solid var(--border);
-  border-radius:10px;
-  color:var(--muted);
-  background:#0c120f;
-  font-size:12px;
-  line-height:1.4;
-  white-space:pre-wrap;
 }
 
 .invite-card{
@@ -393,13 +376,26 @@ body{
 .watermark.active{
   display:block;
 }
+
+.admin-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+
+.private-tools{
+  display:none;
+}
+
+.private-tools.active{
+  display:block;
+}
 </style>
 </head>
 
 <body>
 
 <div class="watermark" id="privateWatermark"></div>
-
 <div class="invite-popup" id="invitePopup"></div>
 
 <div class="app">
@@ -441,13 +437,22 @@ body{
       <div class="card">
         <div class="title">Закрытые комнаты</div>
         <div class="subtitle">
-          Пригласи человека в приватную комнату. Sabrina предупредит вторую сторону, если trust приглашающего низкий.
+          Создай приватную комнату или пригласи человека в уже существующую по коду.
         </div>
 
         <input id="privateTarget" class="input" placeholder="ник для приглашения">
+        <input id="privateCodeForInvite" class="input" placeholder="код комнаты, если приглашаешь в существующую">
         <button class="btn secondary" onclick="createPrivateInvite()">Пригласить в приват</button>
 
+        <input id="privateJoinCode" class="input" placeholder="войти по коду комнаты">
+        <button class="btn secondary" onclick="joinPrivateByCode()">Войти по коду</button>
+
         <div class="private-log" id="privateLog">Приватные события будут здесь.</div>
+      </div>
+
+      <div class="card" id="myPrivateRoomsCard" style="display:none;">
+        <div class="title">Мои приватные комнаты</div>
+        <div id="myPrivateRooms"></div>
       </div>
 
       <div class="card" id="pendingInvitesCard" style="display:none;">
@@ -457,6 +462,15 @@ body{
     </div>
 
     <div id="chatScreen" class="screen">
+
+      <div class="card private-tools" id="privateTools">
+        <div class="title">Закрытая комната</div>
+        <div class="subtitle" id="privateRoomInfo"></div>
+
+        <input id="privateInviteMoreNick" class="input" placeholder="пригласить ещё ник">
+        <button class="btn secondary" onclick="inviteMoreToCurrentPrivate()">Пригласить ещё</button>
+      </div>
+
       <div class="users" id="roomUsers"></div>
       <div class="chat" id="chat"></div>
     </div>
@@ -526,9 +540,11 @@ const SERVER_URL = "https://neowap-production.up.railway.app";
 let socket = null;
 let currentUser = null;
 let currentRoom = null;
+let currentPrivateCode = null;
 let typingTimer = null;
 let roomsOnline = {};
 let pendingInvites = {};
+let myPrivateRooms = {};
 
 const rooms = [
   { id:"main", name:"Главная", desc:"Общий ламповый чат." },
@@ -646,6 +662,7 @@ async function afterLogin(){
   } catch(e){}
 
   await loadPendingInvites();
+  await loadMyPrivateRooms();
 }
 
 function connectSocket(){
@@ -740,6 +757,7 @@ function connectSocket(){
 
   socket.on("privateInviteCreated", invite => {
     appendPrivateLog("Приглашение отправлено: " + invite.to_nick + " · код " + invite.code);
+    loadMyPrivateRooms();
   });
 
   socket.on("privateInviteError", text => {
@@ -749,10 +767,15 @@ function connectSocket(){
   socket.on("privateInviteAccepted", data => {
     appendPrivateLog("Приватная комната открыта: " + data.code);
     enterPrivateRoom(data.room, data.code);
+    loadMyPrivateRooms();
   });
 
   socket.on("privateInviteDeclined", data => {
     appendPrivateLog("Приглашение отклонено: " + data.to);
+  });
+
+  socket.on("privateJoinedByCode", data => {
+    enterPrivateRoom(data.room, data.code);
   });
 }
 
@@ -779,6 +802,57 @@ async function loadPendingInvites(){
       });
     }
   } catch(e){}
+}
+
+async function loadMyPrivateRooms(){
+  if(!currentUser) return;
+
+  try{
+    const res = await fetch(SERVER_URL + "/private-rooms/" + encodeURIComponent(currentUser.nick));
+    const data = await res.json();
+
+    if(data.ok && Array.isArray(data.rooms)){
+      myPrivateRooms = {};
+
+      data.rooms.forEach(room => {
+        myPrivateRooms[room.code] = room;
+      });
+
+      renderMyPrivateRooms();
+    }
+  } catch(e){}
+}
+
+function renderMyPrivateRooms(){
+  const card = document.getElementById("myPrivateRoomsCard");
+  const box = document.getElementById("myPrivateRooms");
+
+  const rooms = Object.values(myPrivateRooms);
+
+  if(!rooms.length){
+    card.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+
+  card.style.display = "block";
+
+  let html = "";
+
+  rooms.forEach(room => {
+    html += `
+      <div class="card">
+        <div class="title">🔒 ${escapeHtml(room.code)}</div>
+        <div class="subtitle">
+          Создал: ${escapeHtml(room.created_by || "unknown")}<br>
+          Твоя роль: ${escapeHtml(room.role || "member")}
+        </div>
+        <button class="btn secondary" onclick="joinPrivateByCodeValue('${escapeHtml(room.code)}')">Войти</button>
+      </div>
+    `;
+  });
+
+  box.innerHTML = html;
 }
 
 function warningText(invite){
@@ -860,6 +934,7 @@ function showInvitePopup(invite){
 
 function createPrivateInvite(){
   const target = document.getElementById("privateTarget").value.trim();
+  const code = document.getElementById("privateCodeForInvite").value.trim();
 
   if(!target){
     appendPrivateLog("Укажи ник для приглашения.");
@@ -873,10 +948,57 @@ function createPrivateInvite(){
 
   socket.emit("createPrivateInvite", {
     from:currentUser.nick,
-    to:target
+    to:target,
+    code:code
   });
 
   appendPrivateLog("Отправляю приглашение для " + target + "...");
+}
+
+function inviteMoreToCurrentPrivate(){
+  const target = document.getElementById("privateInviteMoreNick").value.trim();
+
+  if(!target){
+    addSystem("Укажи ник для приглашения.");
+    return;
+  }
+
+  if(!currentPrivateCode){
+    addSystem("Ты сейчас не в приватной комнате.");
+    return;
+  }
+
+  socket.emit("createPrivateInvite", {
+    from:currentUser.nick,
+    to:target,
+    code:currentPrivateCode
+  });
+
+  addSystem("Sabrina: приглашение отправлено для " + target + ".");
+  document.getElementById("privateInviteMoreNick").value = "";
+}
+
+function joinPrivateByCode(){
+  const code = document.getElementById("privateJoinCode").value.trim();
+
+  joinPrivateByCodeValue(code);
+}
+
+function joinPrivateByCodeValue(code){
+  if(!code){
+    appendPrivateLog("Укажи код комнаты.");
+    return;
+  }
+
+  if(!socket || !socket.connected){
+    appendPrivateLog("Сервер не подключён.");
+    return;
+  }
+
+  socket.emit("joinPrivateByCode", {
+    code:code,
+    user:currentUser.nick
+  });
 }
 
 function acceptPrivateInvite(code){
@@ -908,9 +1030,11 @@ function declinePrivateInvite(code){
 }
 
 async function enterPrivateRoom(roomId, code){
+  currentPrivateCode = String(code || "").replace("private:", "").toUpperCase();
+
   currentRoom = {
     id:roomId,
-    name:"Приват " + code,
+    name:"Приват " + currentPrivateCode,
     desc:"Закрытая комната"
   };
 
@@ -918,16 +1042,20 @@ async function enterPrivateRoom(roomId, code){
   document.getElementById("roomUsers").innerText = "";
 
   document.getElementById("statusText").innerHTML =
-    "🔒 Закрытая комната · " + escapeHtml(code) + "<br>Приватный разговор";
+    "🔒 Закрытая комната · " + escapeHtml(currentPrivateCode) + "<br>Приватный разговор";
 
   document.getElementById("privateWatermark").innerText =
-    "NeoWAP • " + currentUser.nick + " • " + code;
+    "NeoWAP • " + currentUser.nick + " • " + currentPrivateCode;
 
   document.getElementById("privateWatermark").classList.add("active");
 
+  document.getElementById("privateTools").classList.add("active");
+  document.getElementById("privateRoomInfo").innerHTML =
+    "Код комнаты: <b>" + escapeHtml(currentPrivateCode) + "</b><br>Можно пригласить ещё людей по нику.";
+
   showScreen("chatScreen");
 
-  addSystem("Ты вошёл в закрытую комнату " + code + ".");
+  addSystem("Ты вошёл в закрытую комнату " + currentPrivateCode + ".");
   addSystem("Sabrina: Помни, приватность — это доверие, а не магия. Не делись тем, что может навредить тебе.");
 
   await loadHistory(roomId);
@@ -944,8 +1072,10 @@ async function enterRoom(roomId){
   const room = rooms.find(r => r.id === roomId);
   if(!room) return;
 
+  currentPrivateCode = null;
   currentRoom = room;
 
+  document.getElementById("privateTools").classList.remove("active");
   document.getElementById("privateWatermark").classList.remove("active");
   document.getElementById("privateWatermark").innerText = "";
 
@@ -1119,13 +1249,16 @@ function goHome(){
   }
 
   currentRoom = null;
+  currentPrivateCode = null;
 
+  document.getElementById("privateTools").classList.remove("active");
   document.getElementById("privateWatermark").classList.remove("active");
   document.getElementById("privateWatermark").innerText = "";
 
   document.getElementById("statusText").innerHTML =
     "● Поздняя волна интернета · 2007<br>Тихий чат для тех, кто помнит старую сеть.";
 
+  loadMyPrivateRooms();
   showScreen("roomsScreen");
 }
 
@@ -1166,6 +1299,7 @@ function logout(){
 
   currentUser = null;
   currentRoom = null;
+  currentPrivateCode = null;
 
   if(socket){
     socket.disconnect();
