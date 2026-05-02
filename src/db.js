@@ -76,6 +76,17 @@ async function initDb() {
     );
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS private_reports (
+      id SERIAL PRIMARY KEY,
+      code TEXT NOT NULL,
+      reporter_nick TEXT NOT NULL,
+      target_nick TEXT NOT NULL,
+      reason TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
   console.log("Database ready");
 }
 
