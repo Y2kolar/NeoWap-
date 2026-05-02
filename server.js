@@ -3,8 +3,10 @@ const http = require("http");
 const bcrypt = require("bcryptjs");
 const { Pool } = require("pg");
 const { Server } = require("socket.io");
+
 const statusTools = require("./src/statuses");
 const trustTools = require("./src/trust");
+
 const app = express();
 
 app.use(express.json());
@@ -25,34 +27,23 @@ const pool = new Pool({
 });
 
 function getEarnedStatus(count) {
-  if (count >= 10000) return "Rockstar 🦊";
-  if (count >= 1000) return "Star ⭐";
-  if (count >= 500) return "Moon 🌕";
-  if (count >= 200) return "Whisper 🌓";
-  if (count > 10) return "Silent 🌒";
-  return "No body 🌑";
-}
-
-function getTrustLevel(score) {
-  if (score >= 91) return "проверенный";
-  if (score >= 71) return "спокойный";
-  if (score >= 41) return "обычный";
-  if (score >= 21) return "новый";
-  return "мутный";
-}
-
-function getPrivateWarningLevel(score) {
-  if (score <= 20) return "blocked";
-  if (score <= 40) return "soft";
-  return "none";
-}
-
-function clampTrust(score) {
-  return Math.max(0, Math.min(100, Number(score) || 0));
+  return statusTools.getEarnedStatus(count);
 }
 
 function getActiveStatus(user) {
-  return user.manual_status || user.paid_status || getEarnedStatus(user.messages_count || 0);
+  return statusTools.getActiveStatus(user);
+}
+
+function getTrustLevel(score) {
+  return trustTools.getTrustLevel(score);
+}
+
+function getPrivateWarningLevel(score) {
+  return trustTools.getPrivateWarningLevel(score);
+}
+
+function clampTrust(score) {
+  return trustTools.clampTrust(score);
 }
 
 function makePrivateCode() {
@@ -365,8 +356,8 @@ app.get("/messages/:room", async (req, res) => {
        FROM messages m
        LEFT JOIN users u
        ON lower(u.nick) = lower(m.user_nick)
-       WHERE room = $1
-       ORDER BY id DESC
+       WHERE m.room = $1
+       ORDER BY m.id DESC
        LIMIT 50`,
       [room]
     );
@@ -1093,7 +1084,13 @@ io.on("connection", (socket) => {
         `UPDATE users
          SET messages_count = messages_count + 1,
              last_seen = NOW(),
-             trust_score = LEAST(100, GREATEST(0, COALESCE(trust_score, 35) + CASE WHEN messages_count % 50 = 0 THEN 1 ELSE 0 END))
+             trust_score = LEAST(
+               100,
+               GREATEST(
+                 0,
+                 COALESCE(trust_score, 35) + CASE WHEN messages_count % 50 = 0 THEN 1 ELSE 0 END
+               )
+             )
          WHERE lower(nick) = lower($1)
          RETURNING messages_count, paid_status, manual_status, trust_score`,
         [userNick]
