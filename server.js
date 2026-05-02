@@ -41,7 +41,7 @@ function getTrustLevel(score) {
 }
 
 function getPrivateWarningLevel(score) {
-  if (score <= 20) return "strong";
+  if (score <= 20) return "blocked";
   if (score <= 40) return "soft";
   return "none";
 }
@@ -63,6 +63,21 @@ function makePrivateCode() {
   }
 
   return code;
+}
+
+function normalizePrivateCode(value) {
+  return String(value || "")
+    .trim()
+    .replace("private:", "")
+    .toUpperCase();
+}
+
+function privateRoomId(code) {
+  return "private:" + normalizePrivateCode(code);
+}
+
+function isPrivateRoom(room) {
+  return String(room || "").startsWith("private:");
 }
 
 async function initDb() {
@@ -125,6 +140,17 @@ async function initDb() {
     );
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS private_room_members (
+      id SERIAL PRIMARY KEY,
+      code TEXT NOT NULL,
+      nick TEXT NOT NULL,
+      role TEXT DEFAULT 'member',
+      joined_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(code, nick)
+    );
+  `);
+
   console.log("Database ready");
 }
 
@@ -169,6 +195,47 @@ async function touchUser(nick) {
     `UPDATE users SET last_seen = NOW() WHERE lower(nick) = lower($1)`,
     [nick]
   );
+}
+
+async function addPrivateMember(code, nick, role = "member") {
+  const cleanCode = normalizePrivateCode(code);
+
+  await pool.query(
+    `INSERT INTO private_room_members (code, nick, role)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (code, nick) DO NOTHING`,
+    [cleanCode, nick, role]
+  );
+}
+
+async function isPrivateMember(code, nick) {
+  const cleanCode = normalizePrivateCode(code);
+
+  const result = await pool.query(
+    `SELECT 1
+     FROM private_room_members
+     WHERE code = $1
+     AND lower(nick) = lower($2)
+     LIMIT 1`,
+    [cleanCode, nick]
+  );
+
+  return result.rows.length > 0;
+}
+
+async function privateRoomExists(code) {
+  const cleanCode = normalizePrivateCode(code);
+
+  const result = await pool.query(
+    `SELECT *
+     FROM private_rooms
+     WHERE code = $1
+     AND is_active = true
+     LIMIT 1`,
+    [cleanCode]
+  );
+
+  return result.rows[0];
 }
 
 app.get("/", (req, res) => {
@@ -343,7 +410,7 @@ app.get("/private-invites/:nick", async (req, res) => {
        WHERE lower(to_nick) = lower($1)
        AND status = 'pending'
        ORDER BY id DESC
-       LIMIT 10`,
+       LIMIT 20`,
       [nick]
     );
 
@@ -358,6 +425,36 @@ app.get("/private-invites/:nick", async (req, res) => {
     res.status(500).json({
       ok: false,
       error: "Ошибка загрузки приглашений"
+    });
+  }
+});
+
+app.get("/private-rooms/:nick", async (req, res) => {
+  try {
+    const nick = String(req.params.nick || "").trim();
+
+    const result = await pool.query(
+      `SELECT prm.code, prm.role, prm.joined_at, pr.created_by, pr.is_active
+       FROM private_room_members prm
+       LEFT JOIN private_rooms pr ON pr.code = prm.code
+       WHERE lower(prm.nick) = lower($1)
+       AND pr.is_active = true
+       ORDER BY prm.joined_at DESC
+       LIMIT 20`,
+      [nick]
+    );
+
+    res.json({
+      ok: true,
+      rooms: result.rows
+    });
+
+  } catch (e) {
+    console.error("PRIVATE ROOMS ERROR:", e);
+
+    res.status(500).json({
+      ok: false,
+      error: "Ошибка загрузки приватных комнат"
     });
   }
 });
@@ -550,7 +647,6 @@ async function handleAdminCommand(socket, data) {
     }
 
     const until = new Date(Date.now() + ms);
-
     const newTrust = await changeTrust(targetNick, -25);
 
     await pool.query(
@@ -596,7 +692,6 @@ async function handleAdminCommand(socket, data) {
     }
 
     const until = new Date(Date.now() + ms);
-
     const newTrust = await changeTrust(targetNick, -12);
 
     await pool.query(
@@ -643,11 +738,21 @@ io.on("connection", (socket) => {
     socket.emit("system", "NeoWAP: пользователь зарегистрирован в сети.");
   });
 
-  socket.on("joinRoom", (data) => {
+  socket.on("joinRoom", async (data) => {
     const room = data.room;
     const nick = data.user;
 
     if (!room || !nick) return;
+
+    if (isPrivateRoom(room)) {
+      const code = normalizePrivateCode(room);
+      const allowed = await isPrivateMember(code, nick);
+
+      if (!allowed) {
+        socket.emit("system", "Нет доступа к этой закрытой комнате.");
+        return;
+      }
+    }
 
     addUserSocket(nick, socket.id);
 
@@ -702,6 +807,7 @@ io.on("connection", (socket) => {
     try {
       const fromNick = String(data?.from || "").trim();
       const toNick = String(data?.to || "").trim();
+      const requestedCode = normalizePrivateCode(data?.code || "");
 
       if (!fromNick || !toNick) {
         socket.emit("privateInviteError", "Нужно указать ник.");
@@ -739,13 +845,50 @@ io.on("connection", (socket) => {
       }
 
       const warningLevel = getPrivateWarningLevel(inviter.trust_score || 35);
-      const code = makePrivateCode();
 
-      await pool.query(
-        `INSERT INTO private_rooms (code, created_by, invited_nick)
-         VALUES ($1, $2, $3)`,
-        [code, fromNick, toNick]
-      );
+      if (warningLevel === "blocked") {
+        socket.emit(
+          "privateInviteError",
+          "Sabrina: пока приватные комнаты закрыты для тебя. Немного пообщайся спокойно в общих комнатах — доступ вернётся."
+        );
+        return;
+      }
+
+      let code = requestedCode;
+
+      if (code) {
+        const room = await privateRoomExists(code);
+
+        if (!room) {
+          socket.emit("privateInviteError", "Комната с таким кодом не найдена.");
+          return;
+        }
+
+        const member = await isPrivateMember(code, fromNick);
+
+        if (!member) {
+          socket.emit("privateInviteError", "Ты не участник этой комнаты.");
+          return;
+        }
+
+      } else {
+        code = makePrivateCode();
+
+        await pool.query(
+          `INSERT INTO private_rooms (code, created_by, invited_nick)
+           VALUES ($1, $2, $3)`,
+          [code, fromNick, toNick]
+        );
+
+        await addPrivateMember(code, fromNick, "owner");
+      }
+
+      const alreadyMember = await isPrivateMember(code, toNick);
+
+      if (alreadyMember) {
+        socket.emit("privateInviteError", "Этот пользователь уже участник комнаты.");
+        return;
+      }
 
       const invite = await pool.query(
         `INSERT INTO private_invites (code, from_nick, to_nick, warning_level)
@@ -771,7 +914,7 @@ io.on("connection", (socket) => {
 
   socket.on("acceptPrivateInvite", async (data) => {
     try {
-      const code = String(data?.code || "").trim();
+      const code = normalizePrivateCode(data?.code || "");
       const nick = String(data?.user || "").trim();
 
       if (!code || !nick) return;
@@ -801,18 +944,20 @@ io.on("connection", (socket) => {
         [invite.id]
       );
 
-      const privateRoom = `private:${code}`;
+      await addPrivateMember(code, nick, "member");
+
+      const room = privateRoomId(code);
 
       socket.emit("privateInviteAccepted", {
         code,
-        room: privateRoom,
+        room,
         from: invite.from_nick,
         to: invite.to_nick
       });
 
       emitToNick(invite.from_nick, "privateInviteAccepted", {
         code,
-        room: privateRoom,
+        room,
         from: invite.from_nick,
         to: invite.to_nick
       });
@@ -825,7 +970,7 @@ io.on("connection", (socket) => {
 
   socket.on("declinePrivateInvite", async (data) => {
     try {
-      const code = String(data?.code || "").trim();
+      const code = normalizePrivateCode(data?.code || "");
       const nick = String(data?.user || "").trim();
 
       if (!code || !nick) return;
@@ -855,6 +1000,41 @@ io.on("connection", (socket) => {
 
     } catch (e) {
       console.error("DECLINE PRIVATE INVITE ERROR:", e);
+    }
+  });
+
+  socket.on("joinPrivateByCode", async (data) => {
+    try {
+      const code = normalizePrivateCode(data?.code || "");
+      const nick = String(data?.user || "").trim();
+
+      if (!code || !nick) {
+        socket.emit("privateInviteError", "Укажи код комнаты.");
+        return;
+      }
+
+      const room = await privateRoomExists(code);
+
+      if (!room) {
+        socket.emit("privateInviteError", "Комната не найдена.");
+        return;
+      }
+
+      const member = await isPrivateMember(code, nick);
+
+      if (!member) {
+        socket.emit("privateInviteError", "Нет доступа. Нужно приглашение в эту комнату.");
+        return;
+      }
+
+      socket.emit("privateJoinedByCode", {
+        code,
+        room: privateRoomId(code)
+      });
+
+    } catch (e) {
+      console.error("JOIN PRIVATE BY CODE ERROR:", e);
+      socket.emit("privateInviteError", "Ошибка входа по коду.");
     }
   });
 
@@ -890,6 +1070,16 @@ io.on("connection", (socket) => {
       if (user.muted_until && new Date(user.muted_until) > now) {
         socket.emit("system", "У тебя временный мут.");
         return;
+      }
+
+      if (isPrivateRoom(room)) {
+        const code = normalizePrivateCode(room);
+        const allowed = await isPrivateMember(code, userNick);
+
+        if (!allowed) {
+          socket.emit("system", "Нет доступа к этой закрытой комнате.");
+          return;
+        }
       }
 
       await pool.query(
