@@ -1059,6 +1059,19 @@ function appendAdminLog(text) {
   log.scrollTop = log.scrollHeight;
 }
 
+function togglePrivateCreateBlock(){
+  const block = document.getElementById("privateCreateBlock");
+  const btn = document.getElementById("privateCreateToggle");
+
+  if(!block || !btn) return;
+
+  const opened = block.classList.toggle("active");
+
+  btn.innerText = opened
+    ? "Скрыть управление приватками"
+    : "Открыть управление приватками";
+}
+
 function escapeHtml(str) {
   return String(str)
     .replaceAll("&", "&amp;")
