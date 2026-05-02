@@ -1,11 +1,6 @@
-const express = require("express");
-const http = require("http");
-const bcrypt = require("bcryptjs");
-const { Pool } = require("pg");
-const { Server } = require("socket.io");
-
 const app = express();
 app.use(express.json());
+
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
