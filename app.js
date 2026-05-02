@@ -290,6 +290,12 @@ function connectSocket() {
   socket.on("privateReportResult", text => {
     appendPrivateRoomLog(text);
   });
+  socket.on("adminPrivateReport", data => {
+  const text = data?.text || "Новая жалоба в приватной комнате.";
+
+  appendAdminLog(text);
+  appendPrivateLog(text);
+});
 }
 
 function showSystem(text) {
