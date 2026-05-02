@@ -379,3 +379,11 @@ body{
 .private-tools.active{
   display:block;
 }
+.collapse-body{
+  display:none;
+  margin-top:10px;
+}
+
+.collapse-body.active{
+  display:block;
+}
