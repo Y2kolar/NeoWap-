@@ -131,22 +131,26 @@ function setupSockets(io) {
     console.log("connected", socket.id);
 
     socket.on("registerUser", async (data) => {
-      const nick = String(data?.user || "").trim();
+      try {
+        const nick = String(data?.user || "").trim();
 
-      if (!nick) return;
+        if (!nick) return;
 
-      socket.nick = nick;
-      addUserSocket(nick, socket.id);
+        socket.nick = nick;
+        addUserSocket(nick, socket.id);
 
-      await touchUser(nick);
+        await touchUser(nick);
 
-      socket.emit("system", "NeoWAP: пользователь зарегистрирован в сети.");
+        socket.emit("system", "NeoWAP: пользователь зарегистрирован в сети.");
+      } catch (e) {
+        console.error("REGISTER USER ERROR:", e);
+      }
     });
 
     socket.on("joinRoom", async (data) => {
       try {
-        const room = data.room;
-        const nick = data.user;
+        const room = String(data?.room || "").trim();
+        const nick = String(data?.user || "").trim();
 
         if (!room || !nick) return;
 
@@ -512,7 +516,10 @@ function setupSockets(io) {
         }
 
         io.to(roomId).emit("system", `👤 ${nick} покинул закрытую комнату.`);
-        socket.emit("privateLeftForever", { code });
+
+        socket.emit("privateLeftForever", {
+          code
+        });
 
       } catch (e) {
         console.error("LEAVE PRIVATE ERROR:", e);
@@ -544,6 +551,11 @@ function setupSockets(io) {
         });
 
         io.to(roomId).emit("system", `🔒 ${nick} закрыл приватную комнату.`);
+
+        socket.emit("privateClosed", {
+          code,
+          by: nick
+        });
 
       } catch (e) {
         console.error("CLOSE PRIVATE ERROR:", e);
@@ -599,12 +611,17 @@ function setupSockets(io) {
           `Жалоба на ${target} сохранена. Trust: ${newTrust}/100 · ${getTrustLevel(newTrust)}`
         );
 
-        emitToNick(
-          io,
-          "Admin",
-          "system",
-          `🚩 Жалоба в привате ${code}: ${reporter} → ${target}. Причина: ${reason}`
-        );
+        const reportText = `🚩 Жалоба в привате ${code}: ${reporter} → ${target}. Причина: ${reason}`;
+
+        emitToNick(io, "Admin", "adminPrivateReport", {
+          code,
+          reporter,
+          target,
+          reason,
+          text: reportText
+        });
+
+        emitToNick(io, "Admin", "system", reportText);
 
       } catch (e) {
         console.error("PRIVATE REPORT ERROR:", e);
@@ -614,9 +631,9 @@ function setupSockets(io) {
 
     socket.on("message", async (data) => {
       try {
-        const room = String(data.room).trim();
-        const userNick = String(data.user).trim();
-        const text = String(data.text).trim();
+        const room = String(data?.room || "").trim();
+        const userNick = String(data?.user || "").trim();
+        const text = String(data?.text || "").trim();
 
         if (!room || !userNick || !text) return;
 
@@ -692,7 +709,7 @@ function setupSockets(io) {
           updatedUser.paid_status ||
           getEarnedStatus(updatedUser.messages_count);
 
-        io.to(room).emit("message", {
+        const messagePayload = {
           user: userNick,
           text,
           room,
@@ -700,10 +717,15 @@ function setupSockets(io) {
           messages_count: updatedUser.messages_count,
           trust_level: getTrustLevel(updatedUser.trust_score),
           trust_score: updatedUser.trust_score
-        });
+        };
+
+        io.to(room).emit("message", messagePayload);
+
+        socket.emit("messageSaved", messagePayload);
 
       } catch (e) {
         console.error("SOCKET MESSAGE ERROR:", e);
+        socket.emit("system", "Ошибка отправки сообщения.");
       }
     });
 
