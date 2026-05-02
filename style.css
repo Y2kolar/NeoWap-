@@ -403,3 +403,55 @@ body{
 #myPrivateRooms .card{
   margin-bottom:14px;
 }
+
+.rules-details{
+  margin-top:12px;
+  border:1px solid rgba(61,220,132,.18);
+  border-radius:10px;
+  background:#0c120f;
+  overflow:hidden;
+}
+
+.rules-details summary{
+  padding:12px;
+  color:var(--accent);
+  cursor:pointer;
+  font-size:14px;
+  list-style:none;
+}
+
+.rules-details summary::-webkit-details-marker{
+  display:none;
+}
+
+.rules-details summary::after{
+  content:" +";
+  color:var(--muted);
+}
+
+.rules-details[open] summary::after{
+  content:" −";
+}
+
+.rules-text{
+  padding:0 12px 12px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.55;
+}
+
+.rules-small{
+  margin-top:10px;
+  padding:10px;
+  border:1px solid rgba(61,220,132,.14);
+  border-radius:10px;
+  color:var(--muted);
+  background:#0c120f;
+  font-size:12px;
+  line-height:1.45;
+}
+
+.warn-text{
+  border-color:rgba(255,211,110,.25);
+  color:var(--warn);
+}
