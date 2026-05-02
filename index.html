@@ -13,7 +13,7 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
-  <link rel="stylesheet" href="./style.css?v=9">
+  <link rel="stylesheet" href="./style.css?v=10">
 </head>
 
 <body>
@@ -48,6 +48,31 @@
 
           <input id="nickInput" class="input" placeholder="ник" maxlength="20">
           <input id="passInput" class="input" type="password" placeholder="пароль" maxlength="60">
+
+          <details class="rules-details">
+            <summary>Правила NeoWAP</summary>
+
+            <div class="rules-text">
+              <b>NeoWAP</b> — спокойный ламповый чат для общения без суеты, давления и токсичности.<br><br>
+
+              Входя в NeoWAP, ты принимаешь правила:<br><br>
+
+              — не травить;<br>
+              — не угрожать;<br>
+              — не давить на человека;<br>
+              — не шантажировать;<br>
+              — не разводить на деньги, интим или личные данные;<br>
+              — не публиковать чужие личные данные;<br>
+              — не спамить;<br>
+              — не выдавать себя за администрацию;<br>
+              — не втягивать людей в незаконные действия.<br><br>
+
+              Приватность важна, но приватка не означает безнаказанность.<br>
+              Если на приватную комнату подана жалоба, Sabrina Moderator может проверить ограниченный контекст переписки вокруг жалобы.<br><br>
+
+              Не отправляй в чат то, что может серьёзно навредить тебе, если выйдет наружу.
+            </div>
+          </details>
 
           <button class="btn" onclick="login()">Войти</button>
 
@@ -112,6 +137,11 @@
           <div class="title">Закрытая комната</div>
           <div class="subtitle" id="privateRoomInfo"></div>
 
+          <div class="rules-small">
+            Sabrina: приватная комната — это пространство доверия.  
+            Если кто-то подаст жалобу, я смогу проверить ограниченный контекст этой комнаты вокруг жалобы.
+          </div>
+
           <input id="privateInviteMoreNick" class="input" placeholder="пригласить ещё ник">
 
           <button class="btn secondary" onclick="inviteMoreToCurrentPrivate()">
@@ -124,6 +154,11 @@
 
           <input id="privateReportTarget" class="input" placeholder="ник для жалобы">
           <input id="privateReportReason" class="input" placeholder="причина жалобы">
+
+          <div class="rules-small warn-text">
+            Жалоба не является автоматическим наказанием.  
+            Она запускает проверку контекста Sabrina Moderator.
+          </div>
 
           <button class="btn warn" onclick="reportPrivateRoom()">
             Пожаловаться
@@ -151,6 +186,47 @@
         <div class="card">
           <div class="title">Профиль</div>
           <div class="subtitle" id="profileText"></div>
+
+          <details class="rules-details">
+            <summary>Правила и безопасность</summary>
+
+            <div class="rules-text">
+              <b>1. Общение</b><br>
+              Можно общаться свободно, спокойно, странно, грустно, весело или молча.<br><br>
+
+              Нельзя угрожать, травить, давить, шантажировать, вымогать деньги, разводить на интим или личные данные, публиковать чужие данные, спамить и втягивать людей в незаконные действия.<br><br>
+
+              <b>2. Приватные комнаты</b><br>
+              Приватная комната — это место для более личного общения. Но приватность не означает безнаказанность.<br><br>
+
+              Если на приватную комнату подана жалоба, Sabrina Moderator может проверить ограниченный контекст переписки вокруг жалобы.<br><br>
+
+              Обычно проверяются: текст жалобы, кто пожаловался, на кого пожаловались, последние сообщения в этой приватной комнате, trust и история предупреждений.<br><br>
+
+              Sabrina не должна читать приватки без жалобы.<br><br>
+
+              <b>3. Trust</b><br>
+              Trust — это уровень доверия к пользователю. Он может расти за спокойное общение и снижаться за жалобы, муты, баны и нарушения.<br><br>
+
+              Точный trust других людей не показывается публично.<br><br>
+
+              <b>4. Жалобы</b><br>
+              Жалоба запускает проверку. Если нарушение лёгкое — возможен мут на 1 час и снижение trust. Если нарушение серьёзное — возможен мут на 10 часов и передача админу.<br><br>
+
+              Вечный бан выдаёт только админ.<br><br>
+
+              <b>5. Sabrina Moderator</b><br>
+              Sabrina помогает сохранять спокойную атмосферу. Она может предупреждать, анализировать жалобы, рекомендовать мут и передавать спорные случаи админу.<br><br>
+
+              <b>6. Скриншоты</b><br>
+              NeoWAP не может гарантировать, что другой человек не сделает скриншот, запись экрана или не перескажет разговор.<br><br>
+
+              Не отправляй то, что может серьёзно навредить тебе, если выйдет наружу.<br><br>
+
+              <b>Главное правило</b><br>
+              NeoWAP — не место для охоты на слабых. Общайся так, чтобы после тебя человеку не становилось хуже.
+            </div>
+          </details>
 
           <button class="btn secondary" onclick="logout()">Выйти</button>
         </div>
@@ -218,6 +294,6 @@
 
   </div>
 
-  <script src="./app.js?v=9"></script>
+  <script src="./app.js?v=10"></script>
 </body>
 </html>
