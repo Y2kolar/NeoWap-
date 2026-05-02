@@ -1251,3 +1251,47 @@ window.onload = async function () {
     showScreen("loginScreen");
   }
 };
+/* === NeoWAP PATCH v10: report confirmation rules === */
+
+if (!window.__NEOWAP_PATCH_V10__) {
+  window.__NEOWAP_PATCH_V10__ = true;
+
+  window.reportPrivateRoom = reportPrivateRoom = function () {
+    if (!currentPrivateCode) {
+      appendPrivateRoomLog("Ты сейчас не в приватной комнате.");
+      return;
+    }
+
+    const target = document.getElementById("privateReportTarget").value.trim();
+    const reason = document.getElementById("privateReportReason").value.trim();
+
+    if (!target) {
+      appendPrivateRoomLog("Укажи ник пользователя.");
+      return;
+    }
+
+    const ok = confirm(
+      "Sabrina Moderator проверит ограниченный контекст этой приватной комнаты вокруг жалобы.\n\n" +
+      "Жалоба не является автоматическим наказанием.\n\n" +
+      "Если нарушение подтвердится, пользователь может получить мут и снижение trust.\n\n" +
+      "Отправить жалобу?"
+    );
+
+    if (!ok) return;
+
+    if (!socket || !socket.connected) {
+      connectSocket();
+      appendPrivateRoomLog("Сервер подключается. Повтори действие через секунду.");
+      return;
+    }
+
+    socket.emit("reportPrivateRoom", {
+      code: currentPrivateCode,
+      reporter: currentUser.nick,
+      target: target,
+      reason: reason || "без причины"
+    });
+
+    appendPrivateRoomLog("Жалоба отправляется на проверку Sabrina Moderator...");
+  };
+}
