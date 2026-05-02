@@ -67,6 +67,30 @@ async function initDb() {
   console.log("Database ready");
 }
 
+async function getUserByNick(nick) {
+  const result = await pool.query(
+    "SELECT * FROM users WHERE lower(nick) = lower($1)",
+    [nick]
+  );
+  return result.rows[0];
+}
+
+async function ensureAdmin(user) {
+  if (!user) return user;
+
+  if (String(user.nick).toLowerCase() === "admin" && user.role !== "admin") {
+    await pool.query(
+      "UPDATE users SET role = 'admin' WHERE id = $1",
+      [user.id]
+    );
+
+    user.role = "admin";
+    console.log("Admin role granted to:", user.nick);
+  }
+
+  return user;
+}
+
 app.get("/", (req, res) => {
   res.send("NeoWAP server online");
 });
@@ -109,7 +133,8 @@ app.post("/auth", async (req, res) => {
         [cleanNick, hash]
       );
 
-      const user = created.rows[0];
+      let user = created.rows[0];
+      user = await ensureAdmin(user);
 
       return res.json({
         ok: true,
@@ -122,16 +147,8 @@ app.post("/auth", async (req, res) => {
       });
     }
 
-    const user = existing.rows[0];
-
-    if (user.nick === "Admin" && user.role !== "admin") {
-  await pool.query(
-    "UPDATE users SET role = 'admin' WHERE id = $1",
-    [user.id]
-  );
-
-  user.role = "admin";
-}
+    let user = existing.rows[0];
+    user = await ensureAdmin(user);
 
     const now = new Date();
 
@@ -205,14 +222,6 @@ const io = new Server(server, {
 
 const roomsOnline = {};
 
-async function getUserByNick(nick) {
-  const result = await pool.query(
-    "SELECT * FROM users WHERE lower(nick) = lower($1)",
-    [nick]
-  );
-  return result.rows[0];
-}
-
 function parseDuration(text) {
   const value = parseInt(text);
   if (!value) return null;
@@ -228,7 +237,8 @@ async function handleAdminCommand(socket, data) {
   const text = String(data.text || "").trim();
   const adminNick = String(data.user || "").trim();
 
-  const admin = await getUserByNick(adminNick);
+  let admin = await getUserByNick(adminNick);
+  admin = await ensureAdmin(admin);
 
   if (!admin || admin.role !== "admin") {
     socket.emit("system", "Нет прав администратора.");
@@ -239,13 +249,13 @@ async function handleAdminCommand(socket, data) {
   const command = parts[0];
   const targetNick = parts[1];
 
-  if (!targetNick) {
-    socket.emit("system", "Нужно указать ник.");
+  if (command === "/admin") {
+    socket.emit("system", "Команды: /status Nick Star ⭐ | /ban Nick 1d | /permban Nick | /mute Nick 10m | /unban Nick");
     return true;
   }
 
-  if (command === "/admin") {
-    socket.emit("system", "Команды: /status Nick Star | /ban Nick 1d | /permban Nick | /mute Nick 10m | /unban Nick");
+  if (!targetNick) {
+    socket.emit("system", "Нужно указать ник.");
     return true;
   }
 
@@ -410,6 +420,7 @@ io.on("connection", (socket) => {
       );
 
       const updatedUser = updated.rows[0];
+
       const activeStatus =
         updatedUser.manual_status ||
         updatedUser.paid_status ||
@@ -435,7 +446,6 @@ io.on("connection", (socket) => {
 
     if (room && roomsOnline[room]) {
       roomsOnline[room] = Math.max(0, roomsOnline[room] - 1);
-
       io.to(room).emit("system", `👤 Кто-то вышел. Сейчас в комнате: ${roomsOnline[room]}`);
     }
 
