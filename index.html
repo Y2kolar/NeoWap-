@@ -59,19 +59,26 @@
         <div id="rooms"></div>
 
         <div class="card">
-          <div class="title">Закрытые комнаты</div>
-          <div class="subtitle">
-            Создай приватную комнату или пригласи человека в уже существующую по коду.
-          </div>
+        <div class="card">
+  <div class="title">Закрытые комнаты</div>
+  <div class="subtitle">
+    Приватные комнаты, приглашения и вход по коду.
+  </div>
 
-          <input id="privateTarget" class="input" placeholder="ник для приглашения">
-          <input id="privateCodeForInvite" class="input" placeholder="код комнаты, если приглашаешь в существующую">
-          <button class="btn secondary" onclick="createPrivateInvite()">Пригласить в приват</button>
+  <button class="btn secondary" onclick="togglePrivateCreateBlock()" id="privateCreateToggle">
+    Открыть управление приватками
+  </button>
 
-          <input id="privateJoinCode" class="input" placeholder="войти по коду комнаты">
-          <button class="btn secondary" onclick="joinPrivateByCode()">Войти по коду</button>
+  <div id="privateCreateBlock" class="collapse-body">
+    <input id="privateTarget" class="input" placeholder="ник для приглашения">
+    <input id="privateCodeForInvite" class="input" placeholder="код комнаты, если приглашаешь в существующую">
+    <button class="btn secondary" onclick="createPrivateInvite()">Пригласить в приват</button>
 
-          <div class="private-log" id="privateLog">Приватные события будут здесь.</div>
+    <input id="privateJoinCode" class="input" placeholder="войти по коду комнаты">
+    <button class="btn secondary" onclick="joinPrivateByCode()">Войти по коду</button>
+  </div>
+
+  <div class="private-log" id="privateLog">Приватные события будут здесь.</div>
         </div>
 
         <div class="card" id="myPrivateRoomsCard" style="display:none;">
