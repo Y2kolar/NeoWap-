@@ -3,7 +3,8 @@ const http = require("http");
 const bcrypt = require("bcryptjs");
 const { Pool } = require("pg");
 const { Server } = require("socket.io");
-
+const statusTools = require("./src/statuses");
+const trustTools = require("./src/trust");
 const app = express();
 
 app.use(express.json());
