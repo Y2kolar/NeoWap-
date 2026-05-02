@@ -7,6 +7,7 @@ const { pool, initDb } = require("./src/db");
 const statusTools = require("./src/statuses");
 const trustTools = require("./src/trust");
 const userTools = require("./src/users");
+const privateRooms = require("./src/privateRooms");
 
 const app = express();
 
@@ -54,32 +55,6 @@ async function touchUser(nick) {
   return userTools.touchUser(nick);
 }
 
-function makePrivateCode() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "P";
-
-  for (let i = 0; i < 5; i++) {
-    code += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-
-  return code;
-}
-
-function normalizePrivateCode(value) {
-  return String(value || "")
-    .trim()
-    .replace("private:", "")
-    .toUpperCase();
-}
-
-function privateRoomId(code) {
-  return "private:" + normalizePrivateCode(code);
-}
-
-function isPrivateRoom(room) {
-  return String(room || "").startsWith("private:");
-}
-
 async function changeTrust(nick, delta) {
   const result = await pool.query(
     `UPDATE users
@@ -90,47 +65,6 @@ async function changeTrust(nick, delta) {
   );
 
   return result.rows[0]?.trust_score;
-}
-
-async function addPrivateMember(code, nick, role = "member") {
-  const cleanCode = normalizePrivateCode(code);
-
-  await pool.query(
-    `INSERT INTO private_room_members (code, nick, role)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (code, nick) DO NOTHING`,
-    [cleanCode, nick, role]
-  );
-}
-
-async function isPrivateMember(code, nick) {
-  const cleanCode = normalizePrivateCode(code);
-
-  const result = await pool.query(
-    `SELECT 1
-     FROM private_room_members
-     WHERE code = $1
-     AND lower(nick) = lower($2)
-     LIMIT 1`,
-    [cleanCode, nick]
-  );
-
-  return result.rows.length > 0;
-}
-
-async function privateRoomExists(code) {
-  const cleanCode = normalizePrivateCode(code);
-
-  const result = await pool.query(
-    `SELECT *
-     FROM private_rooms
-     WHERE code = $1
-     AND is_active = true
-     LIMIT 1`,
-    [cleanCode]
-  );
-
-  return result.rows[0];
 }
 
 app.get("/", (req, res) => {
@@ -639,9 +573,9 @@ io.on("connection", (socket) => {
 
     if (!room || !nick) return;
 
-    if (isPrivateRoom(room)) {
-      const code = normalizePrivateCode(room);
-      const allowed = await isPrivateMember(code, nick);
+    if (privateRooms.isPrivateRoom(room)) {
+      const code = privateRooms.normalizePrivateCode(room);
+      const allowed = await privateRooms.isPrivateMember(code, nick);
 
       if (!allowed) {
         socket.emit("system", "Нет доступа к этой закрытой комнате.");
@@ -702,7 +636,7 @@ io.on("connection", (socket) => {
     try {
       const fromNick = String(data?.from || "").trim();
       const toNick = String(data?.to || "").trim();
-      const requestedCode = normalizePrivateCode(data?.code || "");
+      const requestedCode = privateRooms.normalizePrivateCode(data?.code || "");
 
       if (!fromNick || !toNick) {
         socket.emit("privateInviteError", "Нужно указать ник.");
@@ -752,14 +686,14 @@ io.on("connection", (socket) => {
       let code = requestedCode;
 
       if (code) {
-        const room = await privateRoomExists(code);
+        const room = await privateRooms.privateRoomExists(code);
 
         if (!room) {
           socket.emit("privateInviteError", "Комната с таким кодом не найдена.");
           return;
         }
 
-        const member = await isPrivateMember(code, fromNick);
+        const member = await privateRooms.isPrivateMember(code, fromNick);
 
         if (!member) {
           socket.emit("privateInviteError", "Ты не участник этой комнаты.");
@@ -767,7 +701,7 @@ io.on("connection", (socket) => {
         }
 
       } else {
-        code = makePrivateCode();
+        code = privateRooms.makePrivateCode();
 
         await pool.query(
           `INSERT INTO private_rooms (code, created_by, invited_nick)
@@ -775,10 +709,10 @@ io.on("connection", (socket) => {
           [code, fromNick, toNick]
         );
 
-        await addPrivateMember(code, fromNick, "owner");
+        await privateRooms.addPrivateMember(code, fromNick, "owner");
       }
 
-      const alreadyMember = await isPrivateMember(code, toNick);
+      const alreadyMember = await privateRooms.isPrivateMember(code, toNick);
 
       if (alreadyMember) {
         socket.emit("privateInviteError", "Этот пользователь уже участник комнаты.");
@@ -809,7 +743,7 @@ io.on("connection", (socket) => {
 
   socket.on("acceptPrivateInvite", async (data) => {
     try {
-      const code = normalizePrivateCode(data?.code || "");
+      const code = privateRooms.normalizePrivateCode(data?.code || "");
       const nick = String(data?.user || "").trim();
 
       if (!code || !nick) return;
@@ -839,9 +773,9 @@ io.on("connection", (socket) => {
         [invite.id]
       );
 
-      await addPrivateMember(code, nick, "member");
+      await privateRooms.addPrivateMember(code, nick, "member");
 
-      const room = privateRoomId(code);
+      const room = privateRooms.privateRoomId(code);
 
       socket.emit("privateInviteAccepted", {
         code,
@@ -865,7 +799,7 @@ io.on("connection", (socket) => {
 
   socket.on("declinePrivateInvite", async (data) => {
     try {
-      const code = normalizePrivateCode(data?.code || "");
+      const code = privateRooms.normalizePrivateCode(data?.code || "");
       const nick = String(data?.user || "").trim();
 
       if (!code || !nick) return;
@@ -900,7 +834,7 @@ io.on("connection", (socket) => {
 
   socket.on("joinPrivateByCode", async (data) => {
     try {
-      const code = normalizePrivateCode(data?.code || "");
+      const code = privateRooms.normalizePrivateCode(data?.code || "");
       const nick = String(data?.user || "").trim();
 
       if (!code || !nick) {
@@ -908,14 +842,14 @@ io.on("connection", (socket) => {
         return;
       }
 
-      const room = await privateRoomExists(code);
+      const room = await privateRooms.privateRoomExists(code);
 
       if (!room) {
         socket.emit("privateInviteError", "Комната не найдена.");
         return;
       }
 
-      const member = await isPrivateMember(code, nick);
+      const member = await privateRooms.isPrivateMember(code, nick);
 
       if (!member) {
         socket.emit("privateInviteError", "Нет доступа. Нужно приглашение в эту комнату.");
@@ -924,7 +858,7 @@ io.on("connection", (socket) => {
 
       socket.emit("privateJoinedByCode", {
         code,
-        room: privateRoomId(code)
+        room: privateRooms.privateRoomId(code)
       });
 
     } catch (e) {
@@ -967,9 +901,9 @@ io.on("connection", (socket) => {
         return;
       }
 
-      if (isPrivateRoom(room)) {
-        const code = normalizePrivateCode(room);
-        const allowed = await isPrivateMember(code, userNick);
+      if (privateRooms.isPrivateRoom(room)) {
+        const code = privateRooms.normalizePrivateCode(room);
+        const allowed = await privateRooms.isPrivateMember(code, userNick);
 
         if (!allowed) {
           socket.emit("system", "Нет доступа к этой закрытой комнате.");
