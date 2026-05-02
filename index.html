@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <link rel="stylesheet" href="./style.css?v=8">
   <meta charset="UTF-8" />
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
@@ -13,7 +13,7 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="./style.css?v=9">
 </head>
 
 <body>
@@ -40,6 +40,7 @@
       <div id="loginScreen" class="screen active">
         <div class="card">
           <div class="title">Вход</div>
+
           <div class="subtitle">
             Ник и пароль как раньше.<br>
             Если ник свободен — он создастся. Если занят — нужен его пароль.
@@ -60,26 +61,37 @@
         <div id="rooms"></div>
 
         <div class="card">
-        <div class="card">
-  <div class="title">Закрытые комнаты</div>
-  <div class="subtitle">
-    Приватные комнаты, приглашения и вход по коду.
-  </div>
+          <div class="title">Закрытые комнаты</div>
 
-  <button class="btn secondary" onclick="togglePrivateCreateBlock()" id="privateCreateToggle">
-    Открыть управление приватками
-  </button>
+          <div class="subtitle">
+            Приватные комнаты, приглашения и вход по коду.
+          </div>
 
-  <div id="privateCreateBlock" class="collapse-body">
-    <input id="privateTarget" class="input" placeholder="ник для приглашения">
-    <input id="privateCodeForInvite" class="input" placeholder="код комнаты, если приглашаешь в существующую">
-    <button class="btn secondary" onclick="createPrivateInvite()">Пригласить в приват</button>
+          <button class="btn secondary" onclick="togglePrivateCreateBlock()" id="privateCreateToggle">
+            Открыть управление приватками
+          </button>
 
-    <input id="privateJoinCode" class="input" placeholder="войти по коду комнаты">
-    <button class="btn secondary" onclick="joinPrivateByCode()">Войти по коду</button>
-  </div>
+          <div id="privateCreateBlock" class="collapse-body">
+            <input id="privateTarget" class="input" placeholder="ник для приглашения">
 
-  <div class="private-log" id="privateLog">Приватные события будут здесь.</div>
+            <input
+              id="privateCodeForInvite"
+              class="input"
+              placeholder="код комнаты, если приглашаешь в существующую"
+            >
+
+            <button class="btn secondary" onclick="createPrivateInvite()">
+              Пригласить в приват
+            </button>
+
+            <input id="privateJoinCode" class="input" placeholder="войти по коду комнаты">
+
+            <button class="btn secondary" onclick="joinPrivateByCode()">
+              Войти по коду
+            </button>
+          </div>
+
+          <div class="private-log" id="privateLog">Приватные события будут здесь.</div>
         </div>
 
         <div class="card" id="myPrivateRoomsCard" style="display:none;">
@@ -96,24 +108,38 @@
       <!-- CHAT -->
       <div id="chatScreen" class="screen">
 
-        <!-- PRIVATE ROOM TOOLS: ONLY ONE BLOCK -->
         <div class="card private-tools" id="privateTools">
           <div class="title">Закрытая комната</div>
           <div class="subtitle" id="privateRoomInfo"></div>
 
           <input id="privateInviteMoreNick" class="input" placeholder="пригласить ещё ник">
-          <button class="btn secondary" onclick="inviteMoreToCurrentPrivate()">Пригласить ещё</button>
 
-          <button class="btn secondary" onclick="requestPrivateMembers()">Участники</button>
+          <button class="btn secondary" onclick="inviteMoreToCurrentPrivate()">
+            Пригласить ещё
+          </button>
+
+          <button class="btn secondary" onclick="requestPrivateMembers()">
+            Участники
+          </button>
 
           <input id="privateReportTarget" class="input" placeholder="ник для жалобы">
           <input id="privateReportReason" class="input" placeholder="причина жалобы">
-          <button class="btn warn" onclick="reportPrivateRoom()">Пожаловаться</button>
 
-          <button class="btn danger" onclick="leavePrivateForever()">Покинуть навсегда</button>
-          <button class="btn danger" onclick="closePrivateRoom()">Закрыть комнату</button>
+          <button class="btn warn" onclick="reportPrivateRoom()">
+            Пожаловаться
+          </button>
 
-          <div class="private-log" id="privateRoomLog">События приватной комнаты будут здесь.</div>
+          <button class="btn danger" onclick="leavePrivateForever()">
+            Покинуть навсегда
+          </button>
+
+          <button class="btn danger" onclick="closePrivateRoom()">
+            Закрыть комнату
+          </button>
+
+          <div class="private-log" id="privateRoomLog">
+            События приватной комнаты будут здесь.
+          </div>
         </div>
 
         <div class="users" id="roomUsers"></div>
@@ -125,11 +151,13 @@
         <div class="card">
           <div class="title">Профиль</div>
           <div class="subtitle" id="profileText"></div>
+
           <button class="btn secondary" onclick="logout()">Выйти</button>
         </div>
 
         <div id="adminPanel" class="card" style="display:none;">
           <div class="title">Админ-панель</div>
+
           <div class="subtitle">
             Быстрые действия без ручного ввода команд.
           </div>
@@ -146,10 +174,16 @@
           </div>
 
           <input id="adminTrustValue" class="input" placeholder="trust 0-100">
-          <button class="btn secondary" onclick="adminSetTrust()">Set trust</button>
+
+          <button class="btn secondary" onclick="adminSetTrust()">
+            Set trust
+          </button>
 
           <input id="adminStatusValue" class="input" placeholder="статус, например Rockstar 🦊">
-          <button class="btn secondary" onclick="adminSetStatus()">Set status</button>
+
+          <button class="btn secondary" onclick="adminSetStatus()">
+            Set status
+          </button>
 
           <div class="admin-log" id="adminLog">Журнал админки пуст.</div>
         </div>
@@ -170,6 +204,7 @@
           oninput="sendTyping()"
           onkeydown="if(event.key==='Enter')sendMessage()"
         >
+
         <button class="btn send-btn" onclick="sendMessage()">OK</button>
       </div>
     </div>
@@ -183,7 +218,6 @@
 
   </div>
 
-  <script src="app.js"></script>
-    <script src="./app.js?v=8"></script>
+  <script src="./app.js?v=9"></script>
 </body>
 </html>
