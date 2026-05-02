@@ -464,9 +464,23 @@ body{
     <div id="chatScreen" class="screen">
 
       <div class="card private-tools" id="privateTools">
-        <div class="title">Закрытая комната</div>
-        <div class="subtitle" id="privateRoomInfo"></div>
+  <div class="title">Закрытая комната</div>
+  <div class="subtitle" id="privateRoomInfo"></div>
 
+  <input id="privateInviteMoreNick" class="input" placeholder="пригласить ещё ник">
+  <button class="btn secondary" onclick="inviteMoreToCurrentPrivate()">Пригласить ещё</button>
+
+  <button class="btn secondary" onclick="requestPrivateMembers()">Участники</button>
+
+  <input id="privateReportTarget" class="input" placeholder="ник для жалобы">
+  <input id="privateReportReason" class="input" placeholder="причина жалобы">
+  <button class="btn warn" onclick="reportPrivateRoom()">Пожаловаться</button>
+
+  <button class="btn danger" onclick="leavePrivateForever()">Покинуть навсегда</button>
+  <button class="btn danger" onclick="closePrivateRoom()">Закрыть комнату</button>
+
+  <div class="private-log" id="privateRoomLog">События приватной комнаты будут здесь.</div>
+</div>
         <input id="privateInviteMoreNick" class="input" placeholder="пригласить ещё ник">
         <button class="btn secondary" onclick="inviteMoreToCurrentPrivate()">Пригласить ещё</button>
       </div>
