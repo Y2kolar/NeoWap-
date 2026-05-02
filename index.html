@@ -17,6 +17,7 @@
   --accent2:#3ddc84;
   --border:#1f3a2d;
   --danger:#ff8b8b;
+  --warn:#ffd36e;
 }
 
 *{
@@ -153,6 +154,12 @@ body{
   background:#3a1616;
   color:#ffc6c6;
   border:1px solid #743535;
+}
+
+.btn.warn{
+  background:#33260c;
+  color:#ffe5a1;
+  border:1px solid #8a6b22;
 }
 
 .room{
@@ -331,10 +338,69 @@ body{
   max-height:180px;
   overflow:auto;
 }
+
+.private-log{
+  margin-top:10px;
+  padding:10px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  color:var(--muted);
+  background:#0c120f;
+  font-size:12px;
+  line-height:1.4;
+  white-space:pre-wrap;
+}
+
+.invite-card{
+  border:1px solid rgba(255,211,110,.3);
+}
+
+.invite-warning{
+  color:var(--warn);
+  font-size:13px;
+  line-height:1.45;
+  margin-top:8px;
+}
+
+.invite-popup{
+  position:fixed;
+  left:50%;
+  top:72px;
+  transform:translateX(-50%);
+  width:calc(100% - 24px);
+  max-width:456px;
+  z-index:20;
+  display:none;
+}
+
+.invite-popup.active{
+  display:block;
+}
+
+.watermark{
+  pointer-events:none;
+  position:fixed;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%) rotate(-24deg);
+  color:rgba(183,247,192,.055);
+  font-size:34px;
+  white-space:nowrap;
+  z-index:1;
+  display:none;
+}
+
+.watermark.active{
+  display:block;
+}
 </style>
 </head>
 
 <body>
+
+<div class="watermark" id="privateWatermark"></div>
+
+<div class="invite-popup" id="invitePopup"></div>
 
 <div class="app">
 
@@ -375,11 +441,18 @@ body{
       <div class="card">
         <div class="title">Закрытые комнаты</div>
         <div class="subtitle">
-          Позже тут появится создание приватной комнаты за 10⭐
+          Пригласи человека в приватную комнату. Sabrina предупредит вторую сторону, если trust приглашающего низкий.
         </div>
-        <button class="btn secondary" onclick="alert('Позже добавим')">
-          Создать
-        </button>
+
+        <input id="privateTarget" class="input" placeholder="ник для приглашения">
+        <button class="btn secondary" onclick="createPrivateInvite()">Пригласить в приват</button>
+
+        <div class="private-log" id="privateLog">Приватные события будут здесь.</div>
+      </div>
+
+      <div class="card" id="pendingInvitesCard" style="display:none;">
+        <div class="title">Входящие приглашения</div>
+        <div id="pendingInvites"></div>
       </div>
     </div>
 
@@ -455,6 +528,7 @@ let currentUser = null;
 let currentRoom = null;
 let typingTimer = null;
 let roomsOnline = {};
+let pendingInvites = {};
 
 const rooms = [
   { id:"main", name:"Главная", desc:"Общий ламповый чат." },
@@ -570,6 +644,8 @@ async function afterLogin(){
       renderRooms();
     }
   } catch(e){}
+
+  await loadPendingInvites();
 }
 
 function connectSocket(){
@@ -581,6 +657,12 @@ function connectSocket(){
 
   socket.on("connect", () => {
     console.log("NeoWAP connected");
+
+    if(currentUser){
+      socket.emit("registerUser", {
+        user:currentUser.nick
+      });
+    }
   });
 
   socket.on("connect_error", () => {
@@ -650,6 +732,28 @@ function connectSocket(){
   socket.on("system", text => {
     showSystem(text);
   });
+
+  socket.on("privateInvite", invite => {
+    addPendingInvite(invite);
+    showInvitePopup(invite);
+  });
+
+  socket.on("privateInviteCreated", invite => {
+    appendPrivateLog("Приглашение отправлено: " + invite.to_nick + " · код " + invite.code);
+  });
+
+  socket.on("privateInviteError", text => {
+    appendPrivateLog("Ошибка: " + text);
+  });
+
+  socket.on("privateInviteAccepted", data => {
+    appendPrivateLog("Приватная комната открыта: " + data.code);
+    enterPrivateRoom(data.room, data.code);
+  });
+
+  socket.on("privateInviteDeclined", data => {
+    appendPrivateLog("Приглашение отклонено: " + data.to);
+  });
 }
 
 function showSystem(text){
@@ -658,7 +762,182 @@ function showSystem(text){
     return;
   }
 
+  appendPrivateLog(text);
   appendAdminLog(text);
+}
+
+async function loadPendingInvites(){
+  if(!currentUser) return;
+
+  try{
+    const res = await fetch(SERVER_URL + "/private-invites/" + encodeURIComponent(currentUser.nick));
+    const data = await res.json();
+
+    if(data.ok && Array.isArray(data.invites)){
+      data.invites.forEach(invite => {
+        addPendingInvite(invite);
+      });
+    }
+  } catch(e){}
+}
+
+function warningText(invite){
+  if(invite.warning_level === "strong"){
+    return "Sabrina: Я бы не советовала переходить в приват прямо сейчас. У пользователя были предупреждения или жалобы. Если всё равно хочешь — решение за тобой.";
+  }
+
+  if(invite.warning_level === "soft"){
+    return "Sabrina: Этот пользователь ещё не очень проверен в NeoWAP. Лучше не спешить и сначала немного пообщаться в общей комнате.";
+  }
+
+  return "Sabrina: Пользователь приглашает тебя в закрытую комнату.";
+}
+
+function addPendingInvite(invite){
+  if(!invite || !invite.code) return;
+
+  pendingInvites[invite.code] = invite;
+
+  renderPendingInvites();
+}
+
+function removePendingInvite(code){
+  delete pendingInvites[code];
+
+  renderPendingInvites();
+
+  const popup = document.getElementById("invitePopup");
+  popup.classList.remove("active");
+  popup.innerHTML = "";
+}
+
+function renderPendingInvites(){
+  const box = document.getElementById("pendingInvites");
+  const card = document.getElementById("pendingInvitesCard");
+
+  const invites = Object.values(pendingInvites);
+
+  if(!invites.length){
+    card.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+
+  card.style.display = "block";
+
+  let html = "";
+
+  invites.forEach(invite => {
+    html += `
+      <div class="card invite-card">
+        <div class="title">${escapeHtml(invite.from_nick)} приглашает в приват</div>
+        <div class="subtitle">Код комнаты: ${escapeHtml(invite.code)}</div>
+        <div class="invite-warning">${escapeHtml(warningText(invite))}</div>
+        <button class="btn secondary" onclick="acceptPrivateInvite('${escapeHtml(invite.code)}')">Принять</button>
+        <button class="btn danger" onclick="declinePrivateInvite('${escapeHtml(invite.code)}')">Отказаться</button>
+      </div>
+    `;
+  });
+
+  box.innerHTML = html;
+}
+
+function showInvitePopup(invite){
+  const popup = document.getElementById("invitePopup");
+
+  popup.innerHTML = `
+    <div class="card invite-card">
+      <div class="title">Закрытая комната</div>
+      <div class="subtitle">${escapeHtml(invite.from_nick)} приглашает тебя в приват.</div>
+      <div class="invite-warning">${escapeHtml(warningText(invite))}</div>
+      <button class="btn secondary" onclick="acceptPrivateInvite('${escapeHtml(invite.code)}')">Принять</button>
+      <button class="btn danger" onclick="declinePrivateInvite('${escapeHtml(invite.code)}')">Отказаться</button>
+    </div>
+  `;
+
+  popup.classList.add("active");
+}
+
+function createPrivateInvite(){
+  const target = document.getElementById("privateTarget").value.trim();
+
+  if(!target){
+    appendPrivateLog("Укажи ник для приглашения.");
+    return;
+  }
+
+  if(!socket || !socket.connected){
+    appendPrivateLog("Сервер ещё не подключён.");
+    return;
+  }
+
+  socket.emit("createPrivateInvite", {
+    from:currentUser.nick,
+    to:target
+  });
+
+  appendPrivateLog("Отправляю приглашение для " + target + "...");
+}
+
+function acceptPrivateInvite(code){
+  if(!socket || !socket.connected){
+    appendPrivateLog("Сервер не подключён.");
+    return;
+  }
+
+  socket.emit("acceptPrivateInvite", {
+    code:code,
+    user:currentUser.nick
+  });
+
+  removePendingInvite(code);
+}
+
+function declinePrivateInvite(code){
+  if(!socket || !socket.connected){
+    appendPrivateLog("Сервер не подключён.");
+    return;
+  }
+
+  socket.emit("declinePrivateInvite", {
+    code:code,
+    user:currentUser.nick
+  });
+
+  removePendingInvite(code);
+}
+
+async function enterPrivateRoom(roomId, code){
+  currentRoom = {
+    id:roomId,
+    name:"Приват " + code,
+    desc:"Закрытая комната"
+  };
+
+  document.getElementById("chat").innerHTML = "";
+  document.getElementById("roomUsers").innerText = "";
+
+  document.getElementById("statusText").innerHTML =
+    "🔒 Закрытая комната · " + escapeHtml(code) + "<br>Приватный разговор";
+
+  document.getElementById("privateWatermark").innerText =
+    "NeoWAP • " + currentUser.nick + " • " + code;
+
+  document.getElementById("privateWatermark").classList.add("active");
+
+  showScreen("chatScreen");
+
+  addSystem("Ты вошёл в закрытую комнату " + code + ".");
+  addSystem("Sabrina: Помни, приватность — это доверие, а не магия. Не делись тем, что может навредить тебе.");
+
+  await loadHistory(roomId);
+
+  if(socket && socket.connected){
+    socket.emit("joinRoom", {
+      room:roomId,
+      user:currentUser.nick
+    });
+  }
 }
 
 async function enterRoom(roomId){
@@ -666,6 +945,9 @@ async function enterRoom(roomId){
   if(!room) return;
 
   currentRoom = room;
+
+  document.getElementById("privateWatermark").classList.remove("active");
+  document.getElementById("privateWatermark").innerText = "";
 
   document.getElementById("chat").innerHTML = "";
   document.getElementById("roomUsers").innerText = "";
@@ -811,7 +1093,7 @@ function scrollChat(){
 }
 
 function maybeSabrina(text){
-  if(Math.random() > 0.88){
+  if(Math.random() > 0.9){
     setTimeout(() => {
       const replies = [
         "Иногда проще говорить с незнакомцами.",
@@ -837,6 +1119,9 @@ function goHome(){
   }
 
   currentRoom = null;
+
+  document.getElementById("privateWatermark").classList.remove("active");
+  document.getElementById("privateWatermark").innerText = "";
 
   document.getElementById("statusText").innerHTML =
     "● Поздняя волна интернета · 2007<br>Тихий чат для тех, кто помнит старую сеть.";
@@ -888,6 +1173,19 @@ function logout(){
   }
 
   location.reload();
+}
+
+function appendPrivateLog(text){
+  const log = document.getElementById("privateLog");
+
+  if(!log) return;
+
+  if(log.innerText === "Приватные события будут здесь."){
+    log.innerText = "";
+  }
+
+  log.innerText += text + "\n";
+  log.scrollTop = log.scrollHeight;
 }
 
 function getAdminTarget(){
