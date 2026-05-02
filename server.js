@@ -32,6 +32,18 @@ function getEarnedStatus(count) {
   return "No body 🌑";
 }
 
+function getTrustLevel(score) {
+  if (score >= 91) return "проверенный";
+  if (score >= 71) return "спокойный";
+  if (score >= 41) return "обычный";
+  if (score >= 21) return "новый";
+  return "мутный";
+}
+
+function clampTrust(score) {
+  return Math.max(0, Math.min(100, Number(score) || 0));
+}
+
 function getActiveStatus(user) {
   return user.manual_status || user.paid_status || getEarnedStatus(user.messages_count || 0);
 }
@@ -64,6 +76,13 @@ async function initDb() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_forever BOOLEAN DEFAULT false;`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS muted_until TIMESTAMP;`);
 
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS trust_score INTEGER DEFAULT 35;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS warnings_count INTEGER DEFAULT 0;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reports_count INTEGER DEFAULT 0;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mutes_count INTEGER DEFAULT 0;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bans_count INTEGER DEFAULT 0;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP;`);
+
   console.log("Database ready");
 }
 
@@ -91,6 +110,25 @@ async function ensureAdmin(user) {
   return user;
 }
 
+async function changeTrust(nick, delta) {
+  const result = await pool.query(
+    `UPDATE users
+     SET trust_score = LEAST(100, GREATEST(0, COALESCE(trust_score, 35) + $1))
+     WHERE lower(nick) = lower($2)
+     RETURNING trust_score`,
+    [delta, nick]
+  );
+
+  return result.rows[0]?.trust_score;
+}
+
+async function touchUser(nick) {
+  await pool.query(
+    `UPDATE users SET last_seen = NOW() WHERE lower(nick) = lower($1)`,
+    [nick]
+  );
+}
+
 app.get("/", (req, res) => {
   res.send("NeoWAP server online");
 });
@@ -113,6 +151,20 @@ app.post("/auth", async (req, res) => {
     const cleanNick = String(nick).trim();
     const cleanPassword = String(password).trim();
 
+    if (cleanNick.length < 3 || cleanNick.length > 20) {
+      return res.status(400).json({
+        ok: false,
+        error: "Ник должен быть 3–20 символов"
+      });
+    }
+
+    if (cleanPassword.length < 4 || cleanPassword.length > 60) {
+      return res.status(400).json({
+        ok: false,
+        error: "Пароль должен быть 4–60 символов"
+      });
+    }
+
     const existing = await pool.query(
       "SELECT * FROM users WHERE lower(nick) = lower($1)",
       [cleanNick]
@@ -122,8 +174,8 @@ app.post("/auth", async (req, res) => {
       const hash = await bcrypt.hash(cleanPassword, 10);
 
       const created = await pool.query(
-        `INSERT INTO users (nick, password_hash)
-         VALUES ($1, $2)
+        `INSERT INTO users (nick, password_hash, trust_score, last_seen)
+         VALUES ($1, $2, 35, NOW())
          RETURNING *`,
         [cleanNick, hash]
       );
@@ -136,13 +188,31 @@ app.post("/auth", async (req, res) => {
         mode: "registered",
         user: {
           ...user,
-          active_status: getActiveStatus(user)
+          active_status: getActiveStatus(user),
+          earned_status: getEarnedStatus(user.messages_count),
+          trust_level: getTrustLevel(user.trust_score)
         }
       });
     }
 
     let user = existing.rows[0];
     user = await ensureAdmin(user);
+
+    const now = new Date();
+
+    if (user.banned_forever) {
+      return res.status(403).json({
+        ok: false,
+        error: "Этот ник забанен навсегда"
+      });
+    }
+
+    if (user.ban_until && new Date(user.ban_until) > now) {
+      return res.status(403).json({
+        ok: false,
+        error: "Этот ник временно забанен"
+      });
+    }
 
     const valid = await bcrypt.compare(cleanPassword, user.password_hash);
 
@@ -153,17 +223,21 @@ app.post("/auth", async (req, res) => {
       });
     }
 
+    await touchUser(user.nick);
+
     return res.json({
       ok: true,
       mode: "login",
       user: {
         ...user,
-        active_status: getActiveStatus(user)
+        active_status: getActiveStatus(user),
+        earned_status: getEarnedStatus(user.messages_count),
+        trust_level: getTrustLevel(user.trust_score)
       }
     });
 
   } catch (e) {
-    console.error(e);
+    console.error("AUTH ERROR:", e);
 
     res.status(500).json({
       ok: false,
@@ -177,7 +251,7 @@ app.get("/messages/:room", async (req, res) => {
     const room = req.params.room;
 
     const result = await pool.query(
-      `SELECT m.*, u.messages_count, u.manual_status, u.paid_status
+      `SELECT m.*, u.messages_count, u.manual_status, u.paid_status, u.trust_score
        FROM messages m
        LEFT JOIN users u
        ON lower(u.nick) = lower(m.user_nick)
@@ -192,7 +266,8 @@ app.get("/messages/:room", async (req, res) => {
       active_status:
         m.manual_status ||
         m.paid_status ||
-        getEarnedStatus(m.messages_count || 0)
+        getEarnedStatus(m.messages_count || 0),
+      trust_level: getTrustLevel(m.trust_score || 35)
     }));
 
     res.json({
@@ -201,12 +276,19 @@ app.get("/messages/:room", async (req, res) => {
     });
 
   } catch (e) {
-    console.error(e);
+    console.error("MESSAGES ERROR:", e);
 
     res.status(500).json({
       ok: false
     });
   }
+});
+
+app.get("/rooms-online", (req, res) => {
+  res.json({
+    ok: true,
+    rooms: roomsOnline
+  });
 });
 
 const server = http.createServer(app);
@@ -221,8 +303,217 @@ const io = new Server(server, {
 const roomsOnline = {};
 const roomUsers = {};
 
+function parseDuration(text) {
+  const value = parseInt(text);
+  if (!value) return null;
+
+  if (text.endsWith("m")) return value * 60 * 1000;
+  if (text.endsWith("h")) return value * 60 * 60 * 1000;
+  if (text.endsWith("d")) return value * 24 * 60 * 60 * 1000;
+
+  return value * 60 * 1000;
+}
+
 function emitRoomsOnline() {
   io.emit("roomsOnline", roomsOnline);
+}
+
+async function handleAdminCommand(socket, data) {
+  const text = String(data.text || "").trim();
+  const adminNick = String(data.user || "").trim();
+
+  let admin = await getUserByNick(adminNick);
+  admin = await ensureAdmin(admin);
+
+  if (!admin || admin.role !== "admin") {
+    socket.emit("system", "Нет прав администратора.");
+    return true;
+  }
+
+  const parts = text.split(" ");
+  const command = parts[0];
+  const targetNick = parts[1];
+
+  if (command === "/admin") {
+    socket.emit(
+      "system",
+      "Команды: /status Nick Star ⭐ | /trust Nick | /settrust Nick 80 | /warn Nick | /report Nick причина | /ban Nick 1d | /permban Nick | /mute Nick 10m | /unban Nick"
+    );
+    return true;
+  }
+
+  if (!targetNick) {
+    socket.emit("system", "Нужно указать ник.");
+    return true;
+  }
+
+  const target = await getUserByNick(targetNick);
+
+  if (!target) {
+    socket.emit("system", "Пользователь не найден.");
+    return true;
+  }
+
+  if (command === "/trust") {
+    socket.emit(
+      "system",
+      `${target.nick}: trust ${target.trust_score}/100 · ${getTrustLevel(target.trust_score)} · warnings ${target.warnings_count} · reports ${target.reports_count} · mutes ${target.mutes_count} · bans ${target.bans_count}`
+    );
+    return true;
+  }
+
+  if (command === "/settrust") {
+    const value = clampTrust(parts[2]);
+
+    await pool.query(
+      "UPDATE users SET trust_score = $1 WHERE lower(nick) = lower($2)",
+      [value, targetNick]
+    );
+
+    socket.emit(
+      "system",
+      `${target.nick}: trust установлен ${value}/100 · ${getTrustLevel(value)}`
+    );
+    return true;
+  }
+
+  if (command === "/warn") {
+    const newTrust = await changeTrust(targetNick, -5);
+
+    await pool.query(
+      `UPDATE users
+       SET warnings_count = COALESCE(warnings_count, 0) + 1
+       WHERE lower(nick) = lower($1)`,
+      [targetNick]
+    );
+
+    io.emit(
+      "system",
+      `${target.nick} получил предупреждение. Trust: ${newTrust}/100 · ${getTrustLevel(newTrust)}`
+    );
+    return true;
+  }
+
+  if (command === "/report") {
+    const reason = parts.slice(2).join(" ") || "без причины";
+    const newTrust = await changeTrust(targetNick, -7);
+
+    await pool.query(
+      `UPDATE users
+       SET reports_count = COALESCE(reports_count, 0) + 1
+       WHERE lower(nick) = lower($1)`,
+      [targetNick]
+    );
+
+    socket.emit(
+      "system",
+      `Жалоба на ${target.nick} сохранена: ${reason}. Trust: ${newTrust}/100 · ${getTrustLevel(newTrust)}`
+    );
+    return true;
+  }
+
+  if (command === "/status") {
+    const status = parts.slice(2).join(" ");
+
+    if (!status) {
+      socket.emit("system", "Укажи статус.");
+      return true;
+    }
+
+    await pool.query(
+      "UPDATE users SET manual_status = $1 WHERE lower(nick) = lower($2)",
+      [status, targetNick]
+    );
+
+    io.emit("system", `Админ изменил статус пользователя ${target.nick} на ${status}`);
+    return true;
+  }
+
+  if (command === "/ban") {
+    const duration = parts[2] || "1d";
+    const ms = parseDuration(duration);
+
+    if (!ms) {
+      socket.emit("system", "Формат: /ban Nick 1d или 10m или 2h");
+      return true;
+    }
+
+    const until = new Date(Date.now() + ms);
+
+    const newTrust = await changeTrust(targetNick, -25);
+
+    await pool.query(
+      `UPDATE users
+       SET ban_until = $1,
+           bans_count = COALESCE(bans_count, 0) + 1
+       WHERE lower(nick) = lower($2)`,
+      [until, targetNick]
+    );
+
+    io.emit(
+      "system",
+      `${target.nick} временно забанен. Trust: ${newTrust}/100 · ${getTrustLevel(newTrust)}`
+    );
+    return true;
+  }
+
+  if (command === "/permban") {
+    const newTrust = await changeTrust(targetNick, -60);
+
+    await pool.query(
+      `UPDATE users
+       SET banned_forever = true,
+           bans_count = COALESCE(bans_count, 0) + 1
+       WHERE lower(nick) = lower($1)`,
+      [targetNick]
+    );
+
+    io.emit(
+      "system",
+      `${target.nick} забанен навсегда. Trust: ${newTrust}/100 · ${getTrustLevel(newTrust)}`
+    );
+    return true;
+  }
+
+  if (command === "/mute") {
+    const duration = parts[2] || "10m";
+    const ms = parseDuration(duration);
+
+    if (!ms) {
+      socket.emit("system", "Формат: /mute Nick 10m или 1h");
+      return true;
+    }
+
+    const until = new Date(Date.now() + ms);
+
+    const newTrust = await changeTrust(targetNick, -12);
+
+    await pool.query(
+      `UPDATE users
+       SET muted_until = $1,
+           mutes_count = COALESCE(mutes_count, 0) + 1
+       WHERE lower(nick) = lower($2)`,
+      [until, targetNick]
+    );
+
+    io.emit(
+      "system",
+      `${target.nick} получил мут. Trust: ${newTrust}/100 · ${getTrustLevel(newTrust)}`
+    );
+    return true;
+  }
+
+  if (command === "/unban") {
+    await pool.query(
+      "UPDATE users SET banned_forever = false, ban_until = NULL, muted_until = NULL WHERE lower(nick) = lower($1)",
+      [targetNick]
+    );
+
+    io.emit("system", `${target.nick} разбанен.`);
+    return true;
+  }
+
+  return false;
 }
 
 io.on("connection", (socket) => {
@@ -283,9 +574,33 @@ io.on("connection", (socket) => {
       const userNick = String(data.user).trim();
       const text = String(data.text).trim();
 
+      if (!room || !userNick || !text) return;
+
+      if (text.startsWith("/")) {
+        const handled = await handleAdminCommand(socket, data);
+        if (handled) return;
+      }
+
       const user = await getUserByNick(userNick);
 
       if (!user) return;
+
+      const now = new Date();
+
+      if (user.banned_forever) {
+        socket.emit("system", "Ты забанен навсегда.");
+        return;
+      }
+
+      if (user.ban_until && new Date(user.ban_until) > now) {
+        socket.emit("system", "Ты временно забанен.");
+        return;
+      }
+
+      if (user.muted_until && new Date(user.muted_until) > now) {
+        socket.emit("system", "У тебя временный мут.");
+        return;
+      }
 
       await pool.query(
         `INSERT INTO messages (room, user_nick, text)
@@ -295,9 +610,11 @@ io.on("connection", (socket) => {
 
       const updated = await pool.query(
         `UPDATE users
-         SET messages_count = messages_count + 1
+         SET messages_count = messages_count + 1,
+             last_seen = NOW(),
+             trust_score = LEAST(100, GREATEST(0, COALESCE(trust_score, 35) + CASE WHEN messages_count % 50 = 0 THEN 1 ELSE 0 END))
          WHERE lower(nick) = lower($1)
-         RETURNING messages_count, paid_status, manual_status`,
+         RETURNING messages_count, paid_status, manual_status, trust_score`,
         [userNick]
       );
 
@@ -313,11 +630,13 @@ io.on("connection", (socket) => {
         text,
         room,
         active_status: activeStatus,
-        messages_count: updatedUser.messages_count
+        messages_count: updatedUser.messages_count,
+        trust_level: getTrustLevel(updatedUser.trust_score),
+        trust_score: updatedUser.trust_score
       });
 
     } catch (e) {
-      console.error(e);
+      console.error("SOCKET MESSAGE ERROR:", e);
     }
   });
 
