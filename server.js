@@ -3,6 +3,15 @@ const http = require("http");
 const { Server } = require("socket.io");
 
 const app = express();
+
+app.get("/", (req, res) => {
+  res.status(200).send("NeoWAP server online");
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ ok: true });
+});
+
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -12,12 +21,6 @@ const io = new Server(server, {
   }
 });
 
-// Проверка сервера в браузере
-app.get("/", (req, res) => {
-  res.send("NeoWAP server online");
-});
-
-// Комнаты и количество людей
 const rooms = {};
 
 io.on("connection", (socket) => {
@@ -26,23 +29,10 @@ io.on("connection", (socket) => {
   socket.on("joinRoom", (room) => {
     if (!room) return;
 
-    // выйти из старых комнат, кроме собственной socket.id
-    for (const r of socket.rooms) {
-      if (r !== socket.id) {
-        socket.leave(r);
-
-        if (rooms[r]) {
-          rooms[r] = Math.max(0, rooms[r] - 1);
-          io.to(r).emit("system", `👤 Кто-то вышел. Сейчас в комнате: ${rooms[r]}`);
-        }
-      }
-    }
-
     socket.join(room);
     socket.currentRoom = room;
 
-    if (!rooms[room]) rooms[room] = 0;
-    rooms[room]++;
+    rooms[room] = (rooms[room] || 0) + 1;
 
     io.to(room).emit("system", `👤 Кто-то вошёл. Сейчас в комнате: ${rooms[room]}`);
   });
@@ -72,6 +62,13 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`NeoWAP server running on port ${PORT}`);
+});
+
+process.on("SIGTERM", () => {
+  console.log("Railway sent SIGTERM, shutting down gracefully");
+  server.close(() => {
+    process.exit(0);
+  });
 });
