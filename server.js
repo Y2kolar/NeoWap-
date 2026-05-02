@@ -6,6 +6,7 @@ const { Server } = require("socket.io");
 const { pool, initDb } = require("./src/db");
 const statusTools = require("./src/statuses");
 const trustTools = require("./src/trust");
+const userTools = require("./src/users");
 
 const app = express();
 
@@ -41,6 +42,18 @@ function clampTrust(score) {
   return trustTools.clampTrust(score);
 }
 
+async function getUserByNick(nick) {
+  return userTools.getUserByNick(nick);
+}
+
+async function ensureAdmin(user) {
+  return userTools.ensureAdmin(user);
+}
+
+async function touchUser(nick) {
+  return userTools.touchUser(nick);
+}
+
 function makePrivateCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "P";
@@ -67,30 +80,6 @@ function isPrivateRoom(room) {
   return String(room || "").startsWith("private:");
 }
 
-async function getUserByNick(nick) {
-  const result = await pool.query(
-    "SELECT * FROM users WHERE lower(nick) = lower($1)",
-    [nick]
-  );
-
-  return result.rows[0];
-}
-
-async function ensureAdmin(user) {
-  if (!user) return user;
-
-  if (String(user.nick).toLowerCase() === "admin" && user.role !== "admin") {
-    await pool.query(
-      "UPDATE users SET role = 'admin' WHERE id = $1",
-      [user.id]
-    );
-
-    user.role = "admin";
-  }
-
-  return user;
-}
-
 async function changeTrust(nick, delta) {
   const result = await pool.query(
     `UPDATE users
@@ -101,13 +90,6 @@ async function changeTrust(nick, delta) {
   );
 
   return result.rows[0]?.trust_score;
-}
-
-async function touchUser(nick) {
-  await pool.query(
-    `UPDATE users SET last_seen = NOW() WHERE lower(nick) = lower($1)`,
-    [nick]
-  );
 }
 
 async function addPrivateMember(code, nick, role = "member") {
