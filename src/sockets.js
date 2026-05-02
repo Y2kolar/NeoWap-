@@ -101,6 +101,29 @@ function leaveCurrentRoom(socket, io) {
   );
 
   emitRoomsOnline(io);
+
+  socket.currentRoom = null;
+}
+
+async function emitPrivateMembers(socket, code) {
+  const members = await privateRooms.getPrivateMembers(code);
+
+  socket.emit("privateMembersFull", {
+    code: privateRooms.normalizePrivateCode(code),
+    members
+  });
+}
+
+async function changeTrust(nick, delta) {
+  const result = await pool.query(
+    `UPDATE users
+     SET trust_score = LEAST(100, GREATEST(0, COALESCE(trust_score, 35) + $1))
+     WHERE lower(nick) = lower($2)
+     RETURNING trust_score`,
+    [delta, nick]
+  );
+
+  return result.rows[0]?.trust_score;
 }
 
 function setupSockets(io) {
@@ -129,6 +152,13 @@ function setupSockets(io) {
 
         if (privateRooms.isPrivateRoom(room)) {
           const code = privateRooms.normalizePrivateCode(room);
+          const roomExists = await privateRooms.privateRoomExists(code);
+
+          if (!roomExists) {
+            socket.emit("system", "Эта закрытая комната уже закрыта.");
+            return;
+          }
+
           const allowed = await privateRooms.isPrivateMember(code, nick);
 
           if (!allowed) {
@@ -166,6 +196,11 @@ function setupSockets(io) {
           `👤 ${nick} вошёл в комнату`
         );
 
+        if (privateRooms.isPrivateRoom(room)) {
+          const code = privateRooms.normalizePrivateCode(room);
+          await emitPrivateMembers(socket, code);
+        }
+
         emitRoomsOnline(io);
 
       } catch (e) {
@@ -181,6 +216,27 @@ function setupSockets(io) {
         user: data.user,
         active_status: data.active_status
       });
+    });
+
+    socket.on("requestPrivateMembers", async (data) => {
+      try {
+        const code = privateRooms.normalizePrivateCode(data?.code || "");
+        const nick = String(data?.user || "").trim();
+
+        if (!code || !nick) return;
+
+        const allowed = await privateRooms.isPrivateMember(code, nick);
+
+        if (!allowed) {
+          socket.emit("privateInviteError", "Нет доступа к списку участников.");
+          return;
+        }
+
+        await emitPrivateMembers(socket, code);
+
+      } catch (e) {
+        console.error("REQUEST PRIVATE MEMBERS ERROR:", e);
+      }
     });
 
     socket.on("createPrivateInvite", async (data) => {
@@ -302,6 +358,13 @@ function setupSockets(io) {
 
         if (!code || !nick) return;
 
+        const roomExists = await privateRooms.privateRoomExists(code);
+
+        if (!roomExists) {
+          socket.emit("privateInviteError", "Комната уже закрыта.");
+          return;
+        }
+
         const result = await pool.query(
           `SELECT *
            FROM private_invites
@@ -399,7 +462,7 @@ function setupSockets(io) {
         const room = await privateRooms.privateRoomExists(code);
 
         if (!room) {
-          socket.emit("privateInviteError", "Комната не найдена.");
+          socket.emit("privateInviteError", "Комната не найдена или уже закрыта.");
           return;
         }
 
@@ -418,6 +481,134 @@ function setupSockets(io) {
       } catch (e) {
         console.error("JOIN PRIVATE BY CODE ERROR:", e);
         socket.emit("privateInviteError", "Ошибка входа по коду.");
+      }
+    });
+
+    socket.on("leavePrivateRoomForever", async (data) => {
+      try {
+        const code = privateRooms.normalizePrivateCode(data?.code || "");
+        const nick = String(data?.user || "").trim();
+
+        if (!code || !nick) return;
+
+        const member = await privateRooms.getPrivateMember(code, nick);
+
+        if (!member) {
+          socket.emit("privateInviteError", "Ты уже не участник этой комнаты.");
+          return;
+        }
+
+        if (member.role === "owner") {
+          socket.emit("privateInviteError", "Владелец не может покинуть комнату. Можно закрыть её для всех.");
+          return;
+        }
+
+        await privateRooms.removePrivateMember(code, nick);
+
+        const roomId = privateRooms.privateRoomId(code);
+
+        if (socket.currentRoom === roomId) {
+          leaveCurrentRoom(socket, io);
+        }
+
+        io.to(roomId).emit("system", `👤 ${nick} покинул закрытую комнату.`);
+        socket.emit("privateLeftForever", { code });
+
+      } catch (e) {
+        console.error("LEAVE PRIVATE ERROR:", e);
+        socket.emit("privateInviteError", "Ошибка выхода из приватной комнаты.");
+      }
+    });
+
+    socket.on("closePrivateRoom", async (data) => {
+      try {
+        const code = privateRooms.normalizePrivateCode(data?.code || "");
+        const nick = String(data?.user || "").trim();
+
+        if (!code || !nick) return;
+
+        const isOwner = await privateRooms.isPrivateOwner(code, nick);
+
+        if (!isOwner) {
+          socket.emit("privateInviteError", "Закрыть комнату может только владелец.");
+          return;
+        }
+
+        await privateRooms.closePrivateRoom(code);
+
+        const roomId = privateRooms.privateRoomId(code);
+
+        io.to(roomId).emit("privateClosed", {
+          code,
+          by: nick
+        });
+
+        io.to(roomId).emit("system", `🔒 ${nick} закрыл приватную комнату.`);
+
+      } catch (e) {
+        console.error("CLOSE PRIVATE ERROR:", e);
+        socket.emit("privateInviteError", "Ошибка закрытия комнаты.");
+      }
+    });
+
+    socket.on("reportPrivateRoom", async (data) => {
+      try {
+        const code = privateRooms.normalizePrivateCode(data?.code || "");
+        const reporter = String(data?.reporter || "").trim();
+        const target = String(data?.target || "").trim();
+        const reason = String(data?.reason || "").trim() || "без причины";
+
+        if (!code || !reporter || !target) {
+          socket.emit("privateReportResult", "Нужно указать комнату, себя и пользователя.");
+          return;
+        }
+
+        if (reporter.toLowerCase() === target.toLowerCase()) {
+          socket.emit("privateReportResult", "Нельзя пожаловаться на самого себя.");
+          return;
+        }
+
+        const reporterMember = await privateRooms.isPrivateMember(code, reporter);
+        const targetMember = await privateRooms.isPrivateMember(code, target);
+
+        if (!reporterMember || !targetMember) {
+          socket.emit("privateReportResult", "Жалоба доступна только на участника этой приватной комнаты.");
+          return;
+        }
+
+        const targetUser = await getUserByNick(target);
+
+        if (!targetUser) {
+          socket.emit("privateReportResult", "Пользователь не найден.");
+          return;
+        }
+
+        await privateRooms.createPrivateReport(code, reporter, target, reason);
+
+        const newTrust = await changeTrust(target, -10);
+
+        await pool.query(
+          `UPDATE users
+           SET reports_count = COALESCE(reports_count, 0) + 1
+           WHERE lower(nick) = lower($1)`,
+          [target]
+        );
+
+        socket.emit(
+          "privateReportResult",
+          `Жалоба на ${target} сохранена. Trust: ${newTrust}/100 · ${getTrustLevel(newTrust)}`
+        );
+
+        emitToNick(
+          io,
+          "Admin",
+          "system",
+          `🚩 Жалоба в привате ${code}: ${reporter} → ${target}. Причина: ${reason}`
+        );
+
+      } catch (e) {
+        console.error("PRIVATE REPORT ERROR:", e);
+        socket.emit("privateReportResult", "Ошибка отправки жалобы.");
       }
     });
 
@@ -457,6 +648,13 @@ function setupSockets(io) {
 
         if (privateRooms.isPrivateRoom(room)) {
           const code = privateRooms.normalizePrivateCode(room);
+          const roomExists = await privateRooms.privateRoomExists(code);
+
+          if (!roomExists) {
+            socket.emit("system", "Эта закрытая комната уже закрыта.");
+            return;
+          }
+
           const allowed = await privateRooms.isPrivateMember(code, userNick);
 
           if (!allowed) {
