@@ -1,6 +1,14 @@
+const express = require("express");
+const http = require("http");
+const bcrypt = require("bcryptjs");
+const { Pool } = require("pg");
+const { Server } = require("socket.io");
+
 const app = express();
+
 app.use(express.json());
 
+// CORS для обычных HTTP-запросов: /auth, /messages
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -15,7 +23,9 @@ app.use((req, res, next) => {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 async function initDb() {
@@ -46,34 +56,52 @@ app.get("/", (req, res) => {
   res.send("NeoWAP server online");
 });
 
+app.get("/health", (req, res) => {
+  res.json({ ok: true });
+});
+
+// регистрация / вход
 app.post("/auth", async (req, res) => {
   try {
     const { nick, password } = req.body;
 
     if (!nick || !password) {
-      return res.status(400).json({ error: "Нужен ник и пароль" });
+      return res.status(400).json({
+        ok: false,
+        error: "Нужен ник и пароль"
+      });
     }
 
-    if (nick.length < 3 || nick.length > 20) {
-      return res.status(400).json({ error: "Ник должен быть 3–20 символов" });
+    const cleanNick = String(nick).trim();
+    const cleanPassword = String(password).trim();
+
+    if (cleanNick.length < 3 || cleanNick.length > 20) {
+      return res.status(400).json({
+        ok: false,
+        error: "Ник должен быть 3–20 символов"
+      });
     }
 
-    if (password.length < 4 || password.length > 60) {
-      return res.status(400).json({ error: "Пароль должен быть 4–60 символов" });
+    if (cleanPassword.length < 4 || cleanPassword.length > 60) {
+      return res.status(400).json({
+        ok: false,
+        error: "Пароль должен быть 4–60 символов"
+      });
     }
-
-    const cleanNick = nick.trim();
 
     const existing = await pool.query(
       "SELECT * FROM users WHERE lower(nick) = lower($1)",
       [cleanNick]
     );
 
+    // если ника нет — создаём
     if (existing.rows.length === 0) {
-      const hash = await bcrypt.hash(password, 10);
+      const hash = await bcrypt.hash(cleanPassword, 10);
 
       const created = await pool.query(
-        "INSERT INTO users (nick, password_hash) VALUES ($1, $2) RETURNING id, nick, messages_count",
+        `INSERT INTO users (nick, password_hash)
+         VALUES ($1, $2)
+         RETURNING id, nick, messages_count`,
         [cleanNick, hash]
       );
 
@@ -84,11 +112,15 @@ app.post("/auth", async (req, res) => {
       });
     }
 
+    // если ник есть — проверяем пароль
     const user = existing.rows[0];
-    const valid = await bcrypt.compare(password, user.password_hash);
+    const valid = await bcrypt.compare(cleanPassword, user.password_hash);
 
     if (!valid) {
-      return res.status(401).json({ error: "Неверный пароль для этого ника" });
+      return res.status(401).json({
+        ok: false,
+        error: "Неверный пароль для этого ника"
+      });
     }
 
     return res.json({
@@ -102,11 +134,16 @@ app.post("/auth", async (req, res) => {
     });
 
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Ошибка сервера" });
+    console.error("AUTH ERROR:", e);
+
+    return res.status(500).json({
+      ok: false,
+      error: "Ошибка сервера"
+    });
   }
 });
 
+// история сообщений комнаты
 app.get("/messages/:room", async (req, res) => {
   try {
     const room = req.params.room;
@@ -126,8 +163,12 @@ app.get("/messages/:room", async (req, res) => {
     });
 
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Ошибка загрузки сообщений" });
+    console.error("MESSAGES ERROR:", e);
+
+    res.status(500).json({
+      ok: false,
+      error: "Ошибка загрузки сообщений"
+    });
   }
 });
 
@@ -152,7 +193,10 @@ io.on("connection", (socket) => {
       socket.leave(socket.currentRoom);
 
       if (roomsOnline[socket.currentRoom]) {
-        roomsOnline[socket.currentRoom] = Math.max(0, roomsOnline[socket.currentRoom] - 1);
+        roomsOnline[socket.currentRoom] = Math.max(
+          0,
+          roomsOnline[socket.currentRoom] - 1
+        );
       }
     }
 
@@ -161,26 +205,34 @@ io.on("connection", (socket) => {
 
     roomsOnline[room] = (roomsOnline[room] || 0) + 1;
 
-    io.to(room).emit("system", `👤 Кто-то вошёл. Сейчас в комнате: ${roomsOnline[room]}`);
+    io.to(room).emit(
+      "system",
+      `👤 Кто-то вошёл. Сейчас в комнате: ${roomsOnline[room]}`
+    );
   });
 
   socket.on("message", async (data) => {
     try {
       if (!data || !data.room || !data.text || !data.user) return;
 
-      const text = String(data.text).trim();
-      const user = String(data.user).trim();
       const room = String(data.room).trim();
+      const user = String(data.user).trim();
+      const text = String(data.text).trim();
 
-      if (!text || text.length > 1000) return;
+      if (!room || !user || !text) return;
+      if (text.length > 1000) return;
 
       await pool.query(
-        "INSERT INTO messages (room, user_nick, text) VALUES ($1, $2, $3)",
+        `INSERT INTO messages (room, user_nick, text)
+         VALUES ($1, $2, $3)`,
         [room, user, text]
       );
 
       const updated = await pool.query(
-        "UPDATE users SET messages_count = messages_count + 1 WHERE lower(nick) = lower($1) RETURNING messages_count",
+        `UPDATE users
+         SET messages_count = messages_count + 1
+         WHERE lower(nick) = lower($1)
+         RETURNING messages_count`,
         [user]
       );
 
@@ -193,7 +245,7 @@ io.on("connection", (socket) => {
       });
 
     } catch (e) {
-      console.error(e);
+      console.error("SOCKET MESSAGE ERROR:", e);
     }
   });
 
@@ -202,7 +254,11 @@ io.on("connection", (socket) => {
 
     if (room && roomsOnline[room]) {
       roomsOnline[room] = Math.max(0, roomsOnline[room] - 1);
-      io.to(room).emit("system", `👤 Кто-то вышел. Сейчас в комнате: ${roomsOnline[room]}`);
+
+      io.to(room).emit(
+        "system",
+        `👤 Кто-то вышел. Сейчас в комнате: ${roomsOnline[room]}`
+      );
     }
 
     console.log("User disconnected:", socket.id);
@@ -211,11 +267,13 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3000;
 
-initDb().then(() => {
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`NeoWAP server running on port ${PORT}`);
+initDb()
+  .then(() => {
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`NeoWAP server running on port ${PORT}`);
+    });
+  })
+  .catch((e) => {
+    console.error("Database init failed:", e);
+    process.exit(1);
   });
-}).catch((e) => {
-  console.error("Database init failed:", e);
-  process.exit(1);
-});
