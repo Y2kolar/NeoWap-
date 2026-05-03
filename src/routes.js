@@ -50,6 +50,14 @@ async function requireAdmin(adminNick) {
   return user;
 }
 
+async function createNotification(nick, type, title, body) {
+  await pool.query(
+    `INSERT INTO notifications (nick, type, title, body)
+     VALUES ($1, $2, $3, $4)`,
+    [nick, type || "system", title, body]
+  );
+}
+
 function setupRoutes(app, options = {}) {
   const getRoomsOnline = options.getRoomsOnline || (() => ({}));
 
