@@ -502,3 +502,37 @@ body{
 .report-message:last-child{
   border-bottom:none;
 }
+
+.neo-notification-box{
+  position:fixed;
+  left:50%;
+  top:76px;
+  transform:translateX(-50%);
+  width:calc(100% - 24px);
+  max-width:456px;
+  z-index:50;
+  pointer-events:none;
+}
+
+.neo-notification{
+  pointer-events:auto;
+  margin-bottom:10px;
+  padding:12px;
+  border:1px solid rgba(61,220,132,.25);
+  border-radius:14px;
+  background:rgba(12,18,15,.98);
+  box-shadow:0 8px 28px rgba(0,0,0,.45);
+}
+
+.neo-notification-title{
+  color:var(--accent);
+  font-size:15px;
+  margin-bottom:6px;
+}
+
+.neo-notification-body{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.45;
+  margin-bottom:10px;
+}
