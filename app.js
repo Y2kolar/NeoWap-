@@ -2902,3 +2902,185 @@ if (!window.__NEOWAP_PRIVATE_COMPACT_V24__) {
     await oldEnterRoomV24(roomId);
   };
 }
+
+/* === NeoWAP v25: private top auto-hide on scroll === */
+
+if (!window.__NEOWAP_PRIVATE_TOP_AUTOHIDE_V25__) {
+  window.__NEOWAP_PRIVATE_TOP_AUTOHIDE_V25__ = true;
+
+  let neoPrivateLastScroll = 0;
+  let neoPrivateTopInstalled = false;
+
+  function isPrivateChatActiveV25() {
+    const chatScreen = document.getElementById("chatScreen");
+
+    return Boolean(
+      currentPrivateCode &&
+      chatScreen &&
+      chatScreen.classList.contains("active")
+    );
+  }
+
+  function updatePrivateToolsTopV25() {
+    const header = document.querySelector(".header");
+    const status = document.getElementById("statusText");
+
+    let top = 130;
+
+    if (status && !status.classList.contains("neo-top-hidden")) {
+      top = status.getBoundingClientRect().bottom + 8;
+    } else if (header) {
+      top = header.getBoundingClientRect().bottom + 8;
+    }
+
+    document.documentElement.style.setProperty(
+      "--neo-private-tools-top",
+      top + "px"
+    );
+  }
+
+  function showPrivateTopV25() {
+    const status = document.getElementById("statusText");
+    const tools = document.getElementById("privateTools");
+
+    if (status) {
+      status.classList.add("private-header-autohide");
+      status.classList.remove("neo-top-hidden");
+    }
+
+    if (tools) {
+      tools.classList.add("private-tools-floating");
+      tools.classList.remove("neo-top-hidden");
+    }
+
+    setTimeout(updatePrivateToolsTopV25, 50);
+  }
+
+  function hidePrivateTopV25() {
+    const status = document.getElementById("statusText");
+    const tools = document.getElementById("privateTools");
+    const body = document.getElementById("privateToolsBody");
+
+    if (body && body.classList.contains("open")) {
+      return;
+    }
+
+    if (status) {
+      status.classList.add("private-header-autohide");
+      status.classList.add("neo-top-hidden");
+    }
+
+    if (tools) {
+      tools.classList.add("private-tools-floating");
+      tools.classList.add("neo-top-hidden");
+    }
+
+    setTimeout(updatePrivateToolsTopV25, 80);
+  }
+
+  function installPrivateTopAutohideV25() {
+    const content = document.querySelector(".content");
+    const tools = document.getElementById("privateTools");
+    const status = document.getElementById("statusText");
+
+    if (!content || !tools || !status) return;
+
+    tools.classList.add("private-tools-floating");
+    status.classList.add("private-header-autohide");
+
+    updatePrivateToolsTopV25();
+
+    if (neoPrivateTopInstalled) return;
+
+    neoPrivateTopInstalled = true;
+
+    content.addEventListener("scroll", () => {
+      if (!isPrivateChatActiveV25()) return;
+
+      const current = content.scrollTop;
+      const diff = current - neoPrivateLastScroll;
+
+      if (current < 20) {
+        showPrivateTopV25();
+      } else if (diff > 6) {
+        hidePrivateTopV25();
+      } else if (diff < -6) {
+        showPrivateTopV25();
+      }
+
+      neoPrivateLastScroll = current;
+    });
+
+    window.addEventListener("resize", updatePrivateToolsTopV25);
+  }
+
+  const oldEnterPrivateRoomV25 = enterPrivateRoom;
+
+  window.enterPrivateRoom = enterPrivateRoom = async function (roomId, code) {
+    await oldEnterPrivateRoomV25(roomId, code);
+
+    setTimeout(() => {
+      installPrivateTopAutohideV25();
+      showPrivateTopV25();
+
+      setTimeout(() => {
+        const content = document.querySelector(".content");
+
+        if (content && content.scrollTop > 20) {
+          hidePrivateTopV25();
+        }
+      }, 1800);
+    }, 200);
+  };
+
+  const oldGoChatV25 = goChat;
+
+  window.goChat = goChat = function () {
+    oldGoChatV25();
+
+    if (currentPrivateCode) {
+      setTimeout(() => {
+        installPrivateTopAutohideV25();
+        showPrivateTopV25();
+      }, 120);
+    }
+  };
+
+  const oldGoHomeV25 = goHome;
+
+  window.goHome = goHome = function () {
+    const status = document.getElementById("statusText");
+    const tools = document.getElementById("privateTools");
+
+    if (status) {
+      status.classList.remove("private-header-autohide");
+      status.classList.remove("neo-top-hidden");
+    }
+
+    if (tools) {
+      tools.classList.remove("private-tools-floating");
+      tools.classList.remove("neo-top-hidden");
+    }
+
+    oldGoHomeV25();
+  };
+
+  const oldEnterRoomV25 = enterRoom;
+
+  window.enterRoom = enterRoom = async function (roomId) {
+    const status = document.getElementById("statusText");
+    const tools = document.getElementById("privateTools");
+
+    if (status) {
+      status.classList.remove("private-header-autohide");
+      status.classList.remove("neo-top-hidden");
+    }
+
+    if (tools) {
+      tools.classList.remove("private-tools-floating");
+      tools.classList.remove("neo-top-hidden");
+    }
+
+    await oldEnterRoomV25(roomId);
+  };
+}
