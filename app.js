@@ -1947,3 +1947,89 @@ if (!window.__NEOWAP_SABRINA_MEMORY_V19__) {
 
   window.loadSabrinaProfile = loadSabrinaProfile;
 }
+
+/* === NeoWAP v20: instant messages + pending queue === */
+
+if (!window.__NEOWAP_INSTANT_MESSAGES_V20__) {
+  window.__NEOWAP_INSTANT_MESSAGES_V20__ = true;
+
+  const pendingOutgoingMessages = [];
+
+  function flushPendingOutgoingMessages() {
+    if (!socket || !socket.connected || !currentUser) return;
+
+    while (pendingOutgoingMessages.length > 0) {
+      const item = pendingOutgoingMessages.shift();
+
+      socket.emit("message", {
+        room: item.roomId,
+        user: currentUser.nick,
+        text: item.text
+      });
+    }
+  }
+
+  const oldConnectSocketV20 = connectSocket;
+
+  window.connectSocket = connectSocket = function () {
+    oldConnectSocketV20();
+
+    if (socket && !socket.__neoPendingQueueBound) {
+      socket.__neoPendingQueueBound = true;
+
+      socket.on("connect", () => {
+        flushPendingOutgoingMessages();
+      });
+    }
+
+    flushPendingOutgoingMessages();
+  };
+
+  window.sendMessage = sendMessage = function () {
+    const input = document.getElementById("msgInput");
+    if (!input) return;
+
+    const text = input.value.trim();
+
+    if (!text) return;
+
+    if (!currentUser) {
+      input.value = text;
+      return;
+    }
+
+    if (!currentRoom) {
+      input.value = text;
+      appendPrivateLog("Сначала войди в комнату.");
+      return;
+    }
+
+    input.value = "";
+
+    addMessage(
+      currentUser.nick,
+      text,
+      true,
+      currentUser.active_status || "No body 🌑"
+    );
+
+    if (socket && socket.connected) {
+      socket.emit("message", {
+        room: currentRoom.id,
+        user: currentUser.nick,
+        text: text
+      });
+
+      return;
+    }
+
+    pendingOutgoingMessages.push({
+      roomId: currentRoom.id,
+      text: text
+    });
+
+    connectSocket();
+
+    addSystem("Сообщение показано у тебя. Отправлю на сервер, когда связь восстановится.");
+  };
+}
