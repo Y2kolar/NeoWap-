@@ -1,732 +1,780 @@
-const bcrypt = require("bcryptjs");
+console.log("NeoWAP app.js v13 loaded");
 
-const { pool } = require("./db");
-const statusTools = require("./statuses");
-const trustTools = require("./trust");
-const userTools = require("./users");
-const privateRooms = require("./privateRooms");
+const SERVER_URL = "https://neowap-production.up.railway.app";
 
-function getEarnedStatus(count) {
-  return statusTools.getEarnedStatus(count);
+let socket = null;
+let currentUser = null;
+let currentRoom = null;
+let currentPrivateCode = null;
+let typingTimer = null;
+
+let roomsOnline = {};
+let pendingInvites = {};
+let myPrivateRooms = {};
+
+const rooms = [
+  { id: "main", name: "Главная", desc: "Общий ламповый чат." },
+  { id: "night", name: "Ночной двор", desc: "Для поздних разговоров." },
+  { id: "nostalgia", name: "2007 memories", desc: "Аська, Nokia, старые сайты." },
+  { id: "quiet", name: "Тихая комната", desc: "Для тех, кто просто хочет посидеть." }
+];
+
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach((s) => {
+    s.classList.remove("active");
+  });
+
+  const screen = document.getElementById(id);
+  if (screen) screen.classList.add("active");
+
+  const inputBar = document.getElementById("inputBar");
+  const typingLine = document.getElementById("typingLine");
+
+  if (id === "chatScreen" && currentRoom) {
+    inputBar.classList.add("active");
+  } else {
+    inputBar.classList.remove("active");
+    typingLine.classList.remove("active");
+  }
 }
 
-function getActiveStatus(user) {
-  return statusTools.getActiveStatus(user);
-}
-
-function getTrustLevel(score) {
-  return trustTools.getTrustLevel(score);
-}
-
-async function ensureAdmin(user) {
-  return userTools.ensureAdmin(user);
-}
-
-async function touchUser(nick) {
-  return userTools.touchUser(nick);
-}
-
-async function getUserByNick(nick) {
-  return userTools.getUserByNick(nick);
-}
-
-async function requireAdmin(adminNick) {
-  const cleanNick = String(adminNick || "").trim();
-
-  if (!cleanNick) return null;
-
-  let user = await getUserByNick(cleanNick);
-  user = await ensureAdmin(user);
-
-  if (!user || user.role !== "admin") return null;
-
-  return user;
-}
-
-function addHours(hours) {
-  return new Date(Date.now() + hours * 60 * 60 * 1000);
-}
-
-function setupRoutes(app, options = {}) {
-  const getRoomsOnline = options.getRoomsOnline || (() => ({}));
-
-  app.get("/", (req, res) => {
-    res.send("NeoWAP server online");
-  });
-
-  app.get("/health", (req, res) => {
-    res.json({ ok: true });
-  });
-
-  app.post("/auth", async (req, res) => {
-    try {
-      const { nick, password } = req.body;
-
-      if (!nick || !password) {
-        return res.status(400).json({
-          ok: false,
-          error: "Нужен ник и пароль"
-        });
-      }
-
-      const cleanNick = String(nick).trim();
-      const cleanPassword = String(password).trim();
-
-      if (cleanNick.length < 3 || cleanNick.length > 20) {
-        return res.status(400).json({
-          ok: false,
-          error: "Ник должен быть 3–20 символов"
-        });
-      }
-
-      if (cleanPassword.length < 4 || cleanPassword.length > 60) {
-        return res.status(400).json({
-          ok: false,
-          error: "Пароль должен быть 4–60 символов"
-        });
-      }
-
-      const existing = await pool.query(
-        "SELECT * FROM users WHERE lower(nick) = lower($1)",
-        [cleanNick]
-      );
-
-      if (existing.rows.length === 0) {
-        const hash = await bcrypt.hash(cleanPassword, 10);
-
-        const created = await pool.query(
-          `INSERT INTO users (nick, password_hash, trust_score, last_seen)
-           VALUES ($1, $2, 35, NOW())
-           RETURNING *`,
-          [cleanNick, hash]
-        );
-
-        let user = created.rows[0];
-        user = await ensureAdmin(user);
-
-        return res.json({
-          ok: true,
-          mode: "registered",
-          user: {
-            ...user,
-            active_status: getActiveStatus(user),
-            earned_status: getEarnedStatus(user.messages_count),
-            trust_level: getTrustLevel(user.trust_score)
-          }
-        });
-      }
-
-      let user = existing.rows[0];
-      user = await ensureAdmin(user);
-
-      const now = new Date();
-
-      if (user.banned_forever) {
-        return res.status(403).json({
-          ok: false,
-          error: "Этот ник забанен навсегда"
-        });
-      }
-
-      if (user.ban_until && new Date(user.ban_until) > now) {
-        return res.status(403).json({
-          ok: false,
-          error: "Этот ник временно забанен"
-        });
-      }
-
-      const valid = await bcrypt.compare(cleanPassword, user.password_hash);
-
-      if (!valid) {
-        return res.status(401).json({
-          ok: false,
-          error: "Неверный пароль"
-        });
-      }
-
-      await touchUser(user.nick);
-
-      return res.json({
-        ok: true,
-        mode: "login",
-        user: {
-          ...user,
-          active_status: getActiveStatus(user),
-          earned_status: getEarnedStatus(user.messages_count),
-          trust_level: getTrustLevel(user.trust_score)
-        }
-      });
-
-    } catch (e) {
-      console.error("AUTH ERROR:", e);
-
-      res.status(500).json({
-        ok: false,
-        error: "Ошибка сервера"
-      });
-    }
-  });
-
-  app.get("/messages/:room", async (req, res) => {
-    try {
-      const room = req.params.room;
-
-      const result = await pool.query(
-        `SELECT m.*, u.messages_count, u.manual_status, u.paid_status, u.trust_score
-         FROM messages m
-         LEFT JOIN users u
-         ON lower(u.nick) = lower(m.user_nick)
-         WHERE m.room = $1
-         ORDER BY m.id DESC
-         LIMIT 50`,
-        [room]
-      );
-
-      const messages = result.rows.reverse().map((m) => ({
-        ...m,
-        active_status:
-          m.manual_status ||
-          m.paid_status ||
-          getEarnedStatus(m.messages_count || 0),
-        trust_level: getTrustLevel(m.trust_score || 35)
-      }));
-
-      res.json({
-        ok: true,
-        messages
-      });
-
-    } catch (e) {
-      console.error("MESSAGES ERROR:", e);
-
-      res.status(500).json({
-        ok: false
-      });
-    }
-  });
-
-  app.get("/rooms-online", (req, res) => {
-    res.json({
-      ok: true,
-      rooms: getRoomsOnline()
-    });
-  });
-
-  app.get("/private-invites/:nick", async (req, res) => {
-    try {
-      const nick = String(req.params.nick || "").trim();
-
-      const result = await pool.query(
-        `SELECT *
-         FROM private_invites
-         WHERE lower(to_nick) = lower($1)
-         AND status = 'pending'
-         ORDER BY id DESC
-         LIMIT 20`,
-        [nick]
-      );
-
-      res.json({
-        ok: true,
-        invites: result.rows
-      });
-
-    } catch (e) {
-      console.error("PRIVATE INVITES ERROR:", e);
-
-      res.status(500).json({
-        ok: false,
-        error: "Ошибка загрузки приглашений"
-      });
-    }
-  });
-
-  app.get("/private-rooms/:nick", async (req, res) => {
-    try {
-      const nick = String(req.params.nick || "").trim();
-
-      const result = await pool.query(
-        `SELECT prm.code, prm.role, prm.joined_at, pr.created_by, pr.is_active
-         FROM private_room_members prm
-         LEFT JOIN private_rooms pr ON pr.code = prm.code
-         WHERE lower(prm.nick) = lower($1)
-         AND pr.is_active = true
-         ORDER BY prm.joined_at DESC
-         LIMIT 20`,
-        [nick]
-      );
-
-      res.json({
-        ok: true,
-        rooms: result.rows
-      });
-
-    } catch (e) {
-      console.error("PRIVATE ROOMS ERROR:", e);
-
-      res.status(500).json({
-        ok: false,
-        error: "Ошибка загрузки приватных комнат"
-      });
-    }
-  });
-
-  app.get("/admin/reports", async (req, res) => {
-    try {
-      const admin = await requireAdmin(req.query.admin);
-
-      if (!admin) {
-        return res.status(403).json({
-          ok: false,
-          error: "Нет прав администратора"
-        });
-      }
-
-      const result = await pool.query(
-        `SELECT id, code, reporter_nick, target_nick, reason, status,
-                review_required, created_at, processed_at,
-                admin_reviewed_by, admin_reviewed_at
-         FROM private_reports
-         ORDER BY id DESC
-         LIMIT 50`
-      );
-
-      res.json({
-        ok: true,
-        reports: result.rows
-      });
-
-    } catch (e) {
-      console.error("ADMIN REPORTS ERROR:", e);
-
-      res.status(500).json({
-        ok: false,
-        error: "Ошибка загрузки жалоб"
-      });
-    }
-  });
-
-  app.get("/admin/reports/:id", async (req, res) => {
-    try {
-      const admin = await requireAdmin(req.query.admin);
-
-      if (!admin) {
-        return res.status(403).json({
-          ok: false,
-          error: "Нет прав администратора"
-        });
-      }
-
-      const id = Number(req.params.id);
-
-      if (!id) {
-        return res.status(400).json({
-          ok: false,
-          error: "Некорректный id жалобы"
-        });
-      }
-
-      const reportResult = await pool.query(
-        `SELECT *
-         FROM private_reports
-         WHERE id = $1
-         LIMIT 1`,
-        [id]
-      );
-
-      const report = reportResult.rows[0];
-
-      if (!report) {
-        return res.status(404).json({
-          ok: false,
-          error: "Жалоба не найдена"
-        });
-      }
-
-      const roomId = privateRooms.privateRoomId(report.code);
-
-      const contextResult = await pool.query(
-        `SELECT user_nick, text, created_at
-         FROM messages
-         WHERE room = $1
-         ORDER BY id DESC
-         LIMIT 20`,
-        [roomId]
-      );
-
-      res.json({
-        ok: true,
-        report,
-        context: contextResult.rows.reverse()
-      });
-
-    } catch (e) {
-      console.error("ADMIN REPORT DETAIL ERROR:", e);
-
-      res.status(500).json({
-        ok: false,
-        error: "Ошибка загрузки жалобы"
-      });
-    }
-  });
-
-  app.post("/admin/reports/:id/action", async (req, res) => {
-    try {
-      const { adminNick, action, note } = req.body;
-
-      const admin = await requireAdmin(adminNick);
-
-      if (!admin) {
-        return res.status(403).json({
-          ok: false,
-          error: "Нет прав администратора"
-        });
-      }
-
-      const id = Number(req.params.id);
-
-      if (!id) {
-        return res.status(400).json({
-          ok: false,
-          error: "Некорректный id жалобы"
-        });
-      }
-
-      const reportResult = await pool.query(
-        `SELECT *
-         FROM private_reports
-         WHERE id = $1
-         LIMIT 1`,
-        [id]
-      );
-
-      const report = reportResult.rows[0];
-
-      if (!report) {
-        return res.status(404).json({
-          ok: false,
-          error: "Жалоба не найдена"
-        });
-      }
-
-      let status = "reviewed";
-      let deltaTrust = 0;
-      let warningsInc = 0;
-      let mutesInc = 0;
-      let bansInc = 0;
-      let mutedUntil = null;
-      let banUntil = null;
-      let message = "Действие применено.";
-
-      if (action === "no_violation") {
-        status = "closed_no_violation";
-        message = "Жалоба закрыта: нарушение не подтверждено.";
-      } else if (action === "warn") {
-        status = "action_warn";
-        deltaTrust = -5;
-        warningsInc = 1;
-        message = "Выдано предупреждение, trust -5.";
-      } else if (action === "mute_1h") {
-        status = "action_mute_1h";
-        deltaTrust = -10;
-        mutesInc = 1;
-        mutedUntil = addHours(1);
-        message = "Выдан мут на 1 час, trust -10.";
-      } else if (action === "mute_10h") {
-        status = "action_mute_10h";
-        deltaTrust = -25;
-        mutesInc = 1;
-        mutedUntil = addHours(10);
-        message = "Выдан мут на 10 часов, trust -25.";
-      } else if (action === "ban_1d") {
-        status = "action_ban_1d";
-        deltaTrust = -35;
-        bansInc = 1;
-        banUntil = addHours(24);
-        message = "Выдан бан на 1 день, trust -35.";
-      } else {
-        return res.status(400).json({
-          ok: false,
-          error: "Неизвестное действие"
-        });
-      }
-
-      if (action !== "no_violation") {
-        await pool.query(
-          `UPDATE users
-           SET trust_score = LEAST(100, GREATEST(0, COALESCE(trust_score, 35) + $1)),
-               warnings_count = COALESCE(warnings_count, 0) + $2,
-               mutes_count = COALESCE(mutes_count, 0) + $3,
-               bans_count = COALESCE(bans_count, 0) + $4,
-               muted_until = CASE WHEN $5::timestamp IS NULL THEN muted_until ELSE $5::timestamp END,
-               ban_until = CASE WHEN $6::timestamp IS NULL THEN ban_until ELSE $6::timestamp END
-           WHERE lower(nick) = lower($7)`,
-          [
-            deltaTrust,
-            warningsInc,
-            mutesInc,
-            bansInc,
-            mutedUntil,
-            banUntil,
-            report.target_nick
-          ]
-        );
-      }
-
-      const updatedReport = await pool.query(
-        `UPDATE private_reports
-         SET status = $1,
-             ai_action = $2,
-             ai_notes = $3,
-             review_required = false,
-             processed_at = NOW(),
-             admin_reviewed_by = $4,
-             admin_reviewed_at = NOW()
-         WHERE id = $5
-         RETURNING *`,
-        [
-          status,
-          action,
-          note || message,
-          admin.nick,
-          id
-        ]
-      );
-
-      res.json({
-        ok: true,
-        message,
-        report: updatedReport.rows[0]
-      });
-
-    } catch (e) {
-      console.error("ADMIN REPORT ACTION ERROR:", e);
-
-      res.status(500).json({
-        ok: false,
-        error: "Ошибка применения действия"
-      });
-    }
-  });
-}
-
-module.exports = {
-  setupRoutes
-};
-/* === NeoWAP PATCH v11: admin reports list and quick actions === */
-
-if (!window.__NEOWAP_PATCH_V11__) {
-  window.__NEOWAP_PATCH_V11__ = true;
-
-  function ensureAdminReportsPanel() {
-    const adminPanel = document.getElementById("adminPanel");
-
-    if (!adminPanel || document.getElementById("adminReportsBox")) return;
-
-    const box = document.createElement("div");
-    box.id = "adminReportsBox";
-    box.className = "admin-reports-box";
-
-    box.innerHTML = `
-      <button class="btn secondary" onclick="loadAdminReports()">
-        Жалобы
-      </button>
-
-      <div class="admin-log" id="adminReportsList">
-        Список жалоб пуст.
-      </div>
-
-      <div class="admin-log" id="adminReportDetail">
-        Открой жалобу, чтобы увидеть контекст.
+function renderRooms() {
+  const box = document.getElementById("rooms");
+  if (!box) return;
+
+  let html = "";
+
+  rooms.forEach((room) => {
+    html += `
+      <div class="card room" onclick="enterRoom('${room.id}')">
+        <div class="room-name">
+          <span>${room.name}</span>
+          <span class="online">${roomsOnline[room.id] || 0} online</span>
+        </div>
+        <div class="room-desc">${room.desc}</div>
       </div>
     `;
+  });
 
-    adminPanel.appendChild(box);
+  box.innerHTML = html;
+}
+
+async function login() {
+  const nickInput = document.getElementById("nickInput");
+  const passInput = document.getElementById("passInput");
+  const error = document.getElementById("loginError");
+  const ok = document.getElementById("loginOk");
+
+  const nick = nickInput.value.trim();
+  const password = passInput.value.trim();
+
+  error.innerText = "";
+  ok.innerText = "";
+
+  if (nick.length < 3) {
+    error.innerText = "Ник минимум 3 символа.";
+    return;
   }
 
-  const oldGoProfileV11 = goProfile;
+  if (password.length < 4) {
+    error.innerText = "Пароль минимум 4 символа.";
+    return;
+  }
 
-  window.goProfile = goProfile = function () {
-    oldGoProfileV11();
-    ensureAdminReportsPanel();
-  };
+  try {
+    ok.innerText = "Подключаюсь...";
 
-  window.loadAdminReports = async function () {
-    ensureAdminReportsPanel();
+    const res = await fetch(SERVER_URL + "/auth", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ nick, password })
+    });
 
-    const list = document.getElementById("adminReportsList");
+    const data = await res.json();
 
-    if (!currentUser || currentUser.role !== "admin") {
-      list.innerText = "Нет прав администратора.";
+    if (!res.ok || !data.ok) {
+      ok.innerText = "";
+      error.innerText = data.error || "Ошибка входа.";
       return;
     }
 
-    list.innerText = "Загружаю жалобы...";
+    currentUser = {
+      id: data.user.id,
+      nick: data.user.nick,
+      messages: Number(data.user.messages_count || 0),
+      role: data.user.role || "user",
+      active_status: data.user.active_status || "No body 🌑",
+      earned_status: data.user.earned_status || "No body 🌑",
+      trust_level: data.user.trust_level || "новый",
+      trust_score: data.user.trust_score || 35
+    };
 
-    try {
-      const res = await fetch(
-        SERVER_URL + "/admin/reports?admin=" + encodeURIComponent(currentUser.nick)
-      );
+    localStorage.setItem("neowap_nick", currentUser.nick);
+    localStorage.setItem("neowap_pass", password);
 
-      const data = await res.json();
+    ok.innerText = data.mode === "registered" ? "Ник создан." : "Вход выполнен.";
 
-      if (!data.ok) {
-        list.innerText = data.error || "Ошибка загрузки жалоб.";
-        return;
-      }
+    setTimeout(afterLogin, 250);
 
-      if (!data.reports.length) {
-        list.innerText = "Жалоб пока нет.";
-        return;
-      }
-
-      let html = "";
-
-      data.reports.forEach(r => {
-        const status = escapeHtml(r.status || "pending");
-
-        html += `
-          <div class="admin-report-row">
-            <div>
-              <b>#${r.id}</b> ${escapeHtml(r.reporter_nick)} → ${escapeHtml(r.target_nick)}<br>
-              <span>${escapeHtml(r.reason || "без причины")}</span><br>
-              <small>Комната: ${escapeHtml(r.code)} · статус: ${status}</small>
-            </div>
-
-            <button class="btn secondary" onclick="loadAdminReportDetail(${r.id})">
-              Открыть
-            </button>
-          </div>
-        `;
-      });
-
-      list.innerHTML = html;
-
-    } catch (e) {
-      list.innerText = "Ошибка соединения с сервером.";
-    }
-  };
-
-  window.loadAdminReportDetail = async function (id) {
-    const detail = document.getElementById("adminReportDetail");
-
-    detail.innerText = "Загружаю жалобу #" + id + "...";
-
-    try {
-      const res = await fetch(
-        SERVER_URL + "/admin/reports/" + id + "?admin=" + encodeURIComponent(currentUser.nick)
-      );
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        detail.innerText = data.error || "Ошибка загрузки жалобы.";
-        return;
-      }
-
-      const r = data.report;
-      const context = data.context || [];
-
-      const contextHtml = context.length
-        ? context.map(m => {
-            const time = m.created_at
-              ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-              : "--:--";
-
-            return `
-              <div class="report-message">
-                <b>[${time}] ${escapeHtml(m.user_nick)}:</b>
-                ${escapeHtml(m.text)}
-              </div>
-            `;
-          }).join("")
-        : `<div class="report-message">Контекст пуст.</div>`;
-
-      detail.innerHTML = `
-        <div class="admin-report-detail-card">
-          <div class="title">Жалоба #${r.id}</div>
-
-          <div class="subtitle">
-            Комната: <b>${escapeHtml(r.code)}</b><br>
-            Кто пожаловался: <b>${escapeHtml(r.reporter_nick)}</b><br>
-            На кого: <b>${escapeHtml(r.target_nick)}</b><br>
-            Причина: <b>${escapeHtml(r.reason || "без причины")}</b><br>
-            Статус: <b>${escapeHtml(r.status || "pending")}</b>
-          </div>
-
-          <div class="rules-small">
-            Контекст последних 20 сообщений:
-          </div>
-
-          <div class="report-context">
-            ${contextHtml}
-          </div>
-
-          <button class="btn secondary" onclick="adminReportAction(${r.id}, 'no_violation')">
-            Нет нарушения
-          </button>
-
-          <button class="btn secondary" onclick="adminReportAction(${r.id}, 'warn')">
-            Warn / trust -5
-          </button>
-
-          <button class="btn warn" onclick="adminReportAction(${r.id}, 'mute_1h')">
-            Mute 1h / trust -10
-          </button>
-
-          <button class="btn warn" onclick="adminReportAction(${r.id}, 'mute_10h')">
-            Mute 10h / trust -25
-          </button>
-
-          <button class="btn danger" onclick="adminReportAction(${r.id}, 'ban_1d')">
-            Ban 1d / trust -35
-          </button>
-        </div>
-      `;
-
-    } catch (e) {
-      detail.innerText = "Ошибка соединения с сервером.";
-    }
-  };
-
-  window.adminReportAction = async function (id, action) {
-    const ok = confirm("Применить действие к жалобе #" + id + "?");
-
-    if (!ok) return;
-
-    const detail = document.getElementById("adminReportDetail");
-
-    try {
-      const res = await fetch(SERVER_URL + "/admin/reports/" + id + "/action", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          adminNick: currentUser.nick,
-          action: action
-        })
-      });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        appendAdminLog(data.error || "Ошибка действия.");
-        return;
-      }
-
-      appendAdminLog("Жалоба #" + id + ": " + data.message);
-
-      detail.innerHTML += `
-        <div class="rules-small">
-          ✅ ${escapeHtml(data.message)}
-        </div>
-      `;
-
-      await loadAdminReports();
-
-    } catch (e) {
-      appendAdminLog("Ошибка соединения с сервером.");
-    }
-  };
+  } catch (e) {
+    console.error("LOGIN ERROR:", e);
+    ok.innerText = "";
+    error.innerText = "Сервер не отвечает.";
+  }
 }
+
+async function afterLogin() {
+  const topUser = document.getElementById("topUser");
+  topUser.innerText = currentUser.nick;
+
+  renderRooms();
+  connectSocket();
+  showScreen("roomsScreen");
+
+  try {
+    const r = await fetch(SERVER_URL + "/rooms-online");
+    const d = await r.json();
+
+    if (d.ok) {
+      roomsOnline = d.rooms || {};
+      renderRooms();
+    }
+  } catch (e) {}
+
+  await loadPendingInvites();
+  await loadMyPrivateRooms();
+}
+
+function connectSocket() {
+  if (socket) {
+    if (!socket.connected) socket.connect();
+    return;
+  }
+
+  socket = io(SERVER_URL, {
+    transports: ["websocket", "polling"]
+  });
+
+  socket.on("connect", () => {
+    if (currentUser) {
+      socket.emit("registerUser", {
+        user: currentUser.nick
+      });
+    }
+  });
+
+  socket.on("connect_error", () => {
+    showSystem("Сервер не отвечает. Проверь Railway.");
+  });
+
+  socket.on("roomsOnline", (data) => {
+    roomsOnline = data || {};
+    renderRooms();
+  });
+
+  socket.on("roomUsers", (users) => {
+    const box = document.getElementById("roomUsers");
+    box.innerText = users && users.length
+      ? "Сейчас здесь: " + users.join(", ")
+      : "";
+  });
+
+  socket.on("typing", (data) => {
+    if (!currentRoom || !data || data.user === currentUser.nick) return;
+
+    const line = document.getElementById("typingLine");
+
+    line.innerText =
+      (data.active_status ? data.active_status + " " : "") +
+      data.user +
+      " печатает...";
+
+    line.classList.add("active");
+
+    clearTimeout(typingTimer);
+
+    typingTimer = setTimeout(() => {
+      line.classList.remove("active");
+    }, 1800);
+  });
+
+  socket.on("message", (data) => {
+    if (!data || !currentUser) return;
+
+    if (data.user === currentUser.nick) {
+      updateCurrentUserFromMessage(data);
+      return;
+    }
+
+    addMessage(
+      data.user || "unknown",
+      data.text || "",
+      false,
+      data.active_status || "No body 🌑"
+    );
+  });
+
+  socket.on("messageSaved", (data) => {
+    if (!data || !currentUser) return;
+
+    if (data.user === currentUser.nick) {
+      updateCurrentUserFromMessage(data);
+    }
+  });
+
+  socket.on("system", (text) => {
+    showSystem(text);
+
+    if (
+      currentUser &&
+      currentUser.role === "admin" &&
+      typeof text === "string" &&
+      (text.includes("🚩") || text.toLowerCase().includes("жалоба"))
+    ) {
+      appendAdminLog(text);
+    }
+  });
+
+  socket.on("adminPrivateReport", (data) => {
+    const text = data && data.text ? data.text : "🚩 Новая жалоба в приватной комнате.";
+
+    appendAdminLog(text);
+    appendPrivateLog(text);
+  });
+
+  socket.on("privateInvite", (invite) => {
+    addPendingInvite(invite);
+    showInvitePopup(invite);
+  });
+
+  socket.on("privateInviteCreated", (invite) => {
+    appendPrivateLog("Приглашение отправлено: " + invite.to_nick + " · код " + invite.code);
+
+    if (currentPrivateCode && invite.code === currentPrivateCode) {
+      appendPrivateRoomLog("Приглашение отправлено: " + invite.to_nick);
+    }
+
+    loadMyPrivateRooms();
+  });
+
+  socket.on("privateInviteError", (text) => {
+    appendPrivateLog("Ошибка: " + text);
+    appendPrivateRoomLog("Ошибка: " + text);
+  });
+
+  socket.on("privateInviteAccepted", (data) => {
+    appendPrivateLog("Приватная комната открыта: " + data.code);
+    enterPrivateRoom(data.room, data.code);
+    loadMyPrivateRooms();
+  });
+
+  socket.on("privateInviteDeclined", (data) => {
+    appendPrivateLog("Приглашение отклонено: " + data.to);
+  });
+
+  socket.on("privateJoinedByCode", (data) => {
+    enterPrivateRoom(data.room, data.code);
+  });
+
+  socket.on("privateMembersFull", (data) => {
+    if (!data || !Array.isArray(data.members)) return;
+
+    const list = data.members
+      .map((m) => `${m.role === "owner" ? "👑" : "👤"} ${m.nick} · ${m.role}`)
+      .join("\n");
+
+    appendPrivateRoomLog("Участники комнаты " + data.code + ":\n" + list);
+  });
+
+  socket.on("privateLeftForever", (data) => {
+    appendPrivateLog("Ты покинул приватную комнату " + data.code + ".");
+    appendPrivateRoomLog("Ты покинул эту комнату навсегда.");
+
+    if (data && data.code) {
+      delete myPrivateRooms[data.code];
+      renderMyPrivateRooms();
+    }
+
+    currentRoom = null;
+    currentPrivateCode = null;
+
+    hidePrivateTools();
+    loadMyPrivateRooms();
+    goHome();
+  });
+
+  socket.on("privateClosed", (data) => {
+    appendPrivateLog("Приватная комната " + data.code + " закрыта.");
+    appendPrivateRoomLog("Комната закрыта владельцем.");
+
+    if (data && data.code) {
+      delete myPrivateRooms[data.code];
+      renderMyPrivateRooms();
+    }
+
+    currentRoom = null;
+    currentPrivateCode = null;
+
+    hidePrivateTools();
+    loadMyPrivateRooms();
+    goHome();
+  });
+
+  socket.on("privateReportResult", (text) => {
+    appendPrivateRoomLog(text);
+  });
+}
+
+function updateCurrentUserFromMessage(data) {
+  if (typeof data.messages_count === "number") {
+    currentUser.messages = data.messages_count;
+  }
+
+  if (data.active_status) {
+    currentUser.active_status = data.active_status;
+  }
+
+  if (data.trust_level) {
+    currentUser.trust_level = data.trust_level;
+  }
+
+  if (typeof data.trust_score === "number") {
+    currentUser.trust_score = data.trust_score;
+  }
+}
+
+function showSystem(text) {
+  if (currentRoom && document.getElementById("chatScreen").classList.contains("active")) {
+    addSystem(text);
+    return;
+  }
+
+  appendPrivateLog(text);
+  appendAdminLog(text);
+}
+
+async function loadPendingInvites() {
+  if (!currentUser) return;
+
+  try {
+    const res = await fetch(SERVER_URL + "/private-invites/" + encodeURIComponent(currentUser.nick));
+    const data = await res.json();
+
+    if (data.ok && Array.isArray(data.invites)) {
+      data.invites.forEach((invite) => {
+        addPendingInvite(invite);
+      });
+    }
+  } catch (e) {}
+}
+
+async function loadMyPrivateRooms() {
+  if (!currentUser) return;
+
+  try {
+    const res = await fetch(SERVER_URL + "/private-rooms/" + encodeURIComponent(currentUser.nick));
+    const data = await res.json();
+
+    if (data.ok && Array.isArray(data.rooms)) {
+      myPrivateRooms = {};
+
+      data.rooms.forEach((room) => {
+        myPrivateRooms[room.code] = room;
+      });
+
+      renderMyPrivateRooms();
+    }
+  } catch (e) {}
+}
+
+function renderMyPrivateRooms() {
+  const card = document.getElementById("myPrivateRoomsCard");
+  const box = document.getElementById("myPrivateRooms");
+
+  if (!card || !box) return;
+
+  const roomsList = Object.values(myPrivateRooms || {});
+
+  if (!roomsList.length) {
+    card.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+
+  card.style.display = "block";
+
+  let html = "";
+
+  roomsList.forEach((room) => {
+    const rawCode = String(room.code || "").trim();
+    const code = escapeHtml(rawCode);
+    const roleRaw = String(room.role || "member").trim().toLowerCase();
+    const role = escapeHtml(roleRaw);
+    const creator = escapeHtml(room.created_by || "unknown");
+
+    const actionButton = roleRaw === "owner"
+      ? `<button class="btn danger" onclick="closePrivateFromList('${code}')">Закрыть комнату</button>`
+      : `<button class="btn danger" onclick="leavePrivateFromList('${code}')">Покинуть навсегда</button>`;
+
+    html += `
+      <div class="card">
+        <div class="title">🔒 ${code}</div>
+        <div class="subtitle">
+          Создал: ${creator}<br>
+          Твоя роль: ${role}
+        </div>
+
+        <button class="btn secondary" onclick="joinPrivateByCodeValue('${code}')">Войти</button>
+        ${actionButton}
+      </div>
+    `;
+  });
+
+  box.innerHTML = html;
+}
+
+function warningText(invite) {
+  if (invite.warning_level === "strong" || invite.warning_level === "blocked") {
+    return "Sabrina: Я бы не советовала переходить в приват прямо сейчас. У пользователя были предупреждения или жалобы. Если всё равно хочешь — решение за тобой.";
+  }
+
+  if (invite.warning_level === "soft") {
+    return "Sabrina: Этот пользователь ещё не очень проверен в NeoWAP. Лучше не спешить и сначала немного пообщаться в общей комнате.";
+  }
+
+  return "Sabrina: Пользователь приглашает тебя в закрытую комнату.";
+}
+
+function addPendingInvite(invite) {
+  if (!invite || !invite.code) return;
+
+  pendingInvites[invite.code] = invite;
+  renderPendingInvites();
+}
+
+function removePendingInvite(code) {
+  delete pendingInvites[code];
+
+  renderPendingInvites();
+
+  const popup = document.getElementById("invitePopup");
+  popup.classList.remove("active");
+  popup.innerHTML = "";
+}
+
+function renderPendingInvites() {
+  const box = document.getElementById("pendingInvites");
+  const card = document.getElementById("pendingInvitesCard");
+
+  const invites = Object.values(pendingInvites);
+
+  if (!invites.length) {
+    card.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+
+  card.style.display = "block";
+
+  let html = "";
+
+  invites.forEach((invite) => {
+    html += `
+      <div class="card invite-card">
+        <div class="title">${escapeHtml(invite.from_nick)} приглашает в приват</div>
+        <div class="subtitle">Код комнаты: ${escapeHtml(invite.code)}</div>
+        <div class="invite-warning">${escapeHtml(warningText(invite))}</div>
+        <button class="btn secondary" onclick="acceptPrivateInvite('${escapeHtml(invite.code)}')">Принять</button>
+        <button class="btn danger" onclick="declinePrivateInvite('${escapeHtml(invite.code)}')">Отказаться</button>
+      </div>
+    `;
+  });
+
+  box.innerHTML = html;
+}
+
+function showInvitePopup(invite) {
+  const popup = document.getElementById("invitePopup");
+
+  popup.innerHTML = `
+    <div class="card invite-card">
+      <div class="title">Закрытая комната</div>
+      <div class="subtitle">${escapeHtml(invite.from_nick)} приглашает тебя в приват.</div>
+      <div class="invite-warning">${escapeHtml(warningText(invite))}</div>
+      <button class="btn secondary" onclick="acceptPrivateInvite('${escapeHtml(invite.code)}')">Принять</button>
+      <button class="btn danger" onclick="declinePrivateInvite('${escapeHtml(invite.code)}')">Отказаться</button>
+    </div>
+  `;
+
+  popup.classList.add("active");
+}
+
+function togglePrivateCreateBlock() {
+  const block = document.getElementById("privateCreateBlock");
+  const btn = document.getElementById("privateCreateToggle");
+
+  if (!block || !btn) return;
+
+  const opened = block.classList.toggle("active");
+
+  btn.innerText = opened
+    ? "Скрыть управление приватками"
+    : "Открыть управление приватками";
+}
+
+function createPrivateInvite() {
+  const target = document.getElementById("privateTarget").value.trim();
+  const code = document.getElementById("privateCodeForInvite").value.trim();
+
+  if (!target) {
+    appendPrivateLog("Укажи ник для приглашения.");
+    return;
+  }
+
+  if (!socket || !socket.connected) {
+    connectSocket();
+    appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
+    return;
+  }
+
+  socket.emit("createPrivateInvite", {
+    from: currentUser.nick,
+    to: target,
+    code: code
+  });
+
+  appendPrivateLog("Отправляю приглашение для " + target + "...");
+}
+
+function inviteMoreToCurrentPrivate() {
+  const target = document.getElementById("privateInviteMoreNick").value.trim();
+
+  if (!target) {
+    appendPrivateRoomLog("Укажи ник для приглашения.");
+    return;
+  }
+
+  if (!currentPrivateCode) {
+    appendPrivateRoomLog("Ты сейчас не в приватной комнате.");
+    return;
+  }
+
+  if (!socket || !socket.connected) {
+    connectSocket();
+    appendPrivateRoomLog("Сервер подключается. Повтори действие через секунду.");
+    return;
+  }
+
+  socket.emit("createPrivateInvite", {
+    from: currentUser.nick,
+    to: target,
+    code: currentPrivateCode
+  });
+
+  appendPrivateRoomLog("Приглашение отправляется для " + target + ".");
+  document.getElementById("privateInviteMoreNick").value = "";
+}
+
+function joinPrivateByCode() {
+  const code = document.getElementById("privateJoinCode").value.trim();
+  joinPrivateByCodeValue(code);
+}
+
+function joinPrivateByCodeValue(code) {
+  if (!code) {
+    appendPrivateLog("Укажи код комнаты.");
+    return;
+  }
+
+  if (!socket || !socket.connected) {
+    connectSocket();
+    appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
+    return;
+  }
+
+  socket.emit("joinPrivateByCode", {
+    code: code,
+    user: currentUser.nick
+  });
+}
+
+function acceptPrivateInvite(code) {
+  if (!socket || !socket.connected) {
+    connectSocket();
+    appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
+    return;
+  }
+
+  socket.emit("acceptPrivateInvite", {
+    code: code,
+    user: currentUser.nick
+  });
+
+  removePendingInvite(code);
+}
+
+function declinePrivateInvite(code) {
+  if (!socket || !socket.connected) {
+    connectSocket();
+    appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
+    return;
+  }
+
+  socket.emit("declinePrivateInvite", {
+    code: code,
+    user: currentUser.nick
+  });
+
+  removePendingInvite(code);
+}
+
+async function enterPrivateRoom(roomId, code) {
+  currentPrivateCode = String(code || "").replace("private:", "").toUpperCase();
+
+  currentRoom = {
+    id: roomId,
+    name: "Приват " + currentPrivateCode,
+    desc: "Закрытая комната"
+  };
+
+  document.getElementById("chat").innerHTML = "";
+  document.getElementById("roomUsers").innerText = "";
+
+  document.getElementById("statusText").innerHTML =
+    "🔒 Закрытая комната · " + escapeHtml(currentPrivateCode) + "<br>Приватный разговор";
+
+  document.getElementById("privateWatermark").innerText =
+    "NeoWAP • " + currentUser.nick + " • " + currentPrivateCode;
+
+  document.getElementById("privateWatermark").classList.add("active");
+
+  document.getElementById("privateTools").classList.add("active");
+  document.getElementById("privateRoomLog").innerText = "События приватной комнаты будут здесь.";
+
+  document.getElementById("privateRoomInfo").innerHTML =
+    "Код комнаты: <b>" + escapeHtml(currentPrivateCode) + "</b><br>Можно пригласить ещё людей по нику.";
+
+  showScreen("chatScreen");
+
+  addSystem("Ты вошёл в закрытую комнату " + currentPrivateCode + ".");
+  addSystem("Sabrina: Помни, приватность — это доверие, а не магия. Не делись тем, что может навредить тебе.");
+
+  await loadHistory(roomId);
+
+  if (socket && socket.connected) {
+    socket.emit("joinRoom", {
+      room: roomId,
+      user: currentUser.nick
+    });
+
+    socket.emit("requestPrivateMembers", {
+      code: currentPrivateCode,
+      user: currentUser.nick
+    });
+  } else {
+    connectSocket();
+    addSystem("Подключаюсь к серверу...");
+  }
+}
+
+async function enterRoom(roomId) {
+  const room = rooms.find((r) => r.id === roomId);
+  if (!room) return;
+
+  currentPrivateCode = null;
+  currentRoom = room;
+
+  hidePrivateTools();
+
+  document.getElementById("chat").innerHTML = "";
+  document.getElementById("roomUsers").innerText = "";
+
+  showScreen("chatScreen");
+
+  document.getElementById("statusText").innerHTML =
+    `● ${room.name} · ${roomsOnline[room.id] || 0} online<br>${room.desc}`;
+
+  addSystem("Ты вошёл в комнату.");
+
+  await loadHistory(room.id);
+
+  if (socket && socket.connected) {
+    socket.emit("joinRoom", {
+      room: room.id,
+      user: currentUser.nick
+    });
+  } else {
+    addSystem("Подключаюсь к серверу...");
+    connectSocket();
+
+    setTimeout(() => {
+      if (socket && socket.connected) {
+        socket.emit("joinRoom", {
+          room: room.id,
+          user: currentUser.nick
+        });
+      }
+    }, 1000);
+  }
+
+  setTimeout(() => {
+    addMessage(
+      "Sabrina",
+      "Можно просто читать. Не обязательно сразу что-то говорить.",
+      false,
+      "NeoWAP Host"
+    );
+  }, 700);
+}
+
+async function loadHistory(roomId) {
+  try {
+    const res = await fetch(SERVER_URL + "/messages/" + encodeURIComponent(roomId));
+    const data = await res.json();
+
+    if (data.ok && Array.isArray(data.messages) && data.messages.length) {
+      addSystem("Последние сообщения комнаты:");
+
+      data.messages.forEach((m) => {
+        addMessage(
+          m.user_nick,
+          m.text,
+          currentUser && m.user_nick === currentUser.nick,
+          m.active_status || "No body 🌑"
+        );
+      });
+    }
+
+  } catch (e) {
+    addSystem("История сообщений пока не загрузилась.");
+  }
+}
+
+function sendTyping() {
+  if (socket && socket.connected && currentRoom && currentUser) {
+    socket.emit("typing", {
+      room: currentRoom.id,
+      user: currentUser.nick,
+      active_status: currentUser.active_status
+    });
+  }
+}
+
+function sendMessage() {
+  const input = document.getElementById("msgInput");
+  if (!input) return;
+
+  const text = input.value.trim();
+  if (!text) return;
+
+  if (!currentUser) {
+    input.value = text;
+    return;
+  }
+
+  if (!currentRoom) {
+    input.value = text;
+    appendPrivateLog("Сначала войди в комнату.");
+   
