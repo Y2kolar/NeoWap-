@@ -13,7 +13,7 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
-  <link rel="stylesheet" href="./style.css?v=13">
+  <link rel="stylesheet" href="./style.css?v=14">
 </head>
 
 <body>
@@ -74,7 +74,7 @@
             </div>
           </details>
 
-          <button class="btn" onclick="login()">Войти</button>
+          <button class="btn" id="loginButton" type="button">Войти</button>
 
           <div class="error" id="loginError"></div>
           <div class="ok" id="loginOk"></div>
@@ -294,6 +294,31 @@
 
   </div>
 
-  <script src="./app.js?v=13"></script>
+  <script src="./app.js?v=14"></script>
+
+<script>
+  (function () {
+    function bindLoginButton() {
+      var btn = document.getElementById("loginButton");
+      var ok = document.getElementById("loginOk");
+      var err = document.getElementById("loginError");
+
+      if (!btn) return;
+
+      btn.onclick = function () {
+        if (typeof window.login !== "function") {
+          if (err) err.innerText = "app.js загрузился, но функция login() не доступна. Значит в app.js есть ошибка выполнения.";
+          if (ok) ok.innerText = "";
+          return;
+        }
+
+        window.login();
+      };
+    }
+
+    document.addEventListener("DOMContentLoaded", bindLoginButton);
+    setTimeout(bindLoginButton, 500);
+  })();
+</script>
 </body>
 </html>
