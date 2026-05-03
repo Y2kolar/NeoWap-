@@ -724,3 +724,55 @@ body{
 .private-tools-button-mode .compact-body.open{
   display:block;
 }
+
+/* === NeoWAP v25 private top auto-hide === */
+
+.status.private-status-line.private-header-autohide{
+  transition:
+    opacity .22s ease,
+    transform .22s ease,
+    max-height .22s ease,
+    padding .22s ease,
+    margin .22s ease;
+  max-height:54px;
+}
+
+.status.private-status-line.private-header-autohide.neo-top-hidden{
+  opacity:0;
+  transform:translateY(-10px);
+  max-height:0;
+  padding-top:0;
+  padding-bottom:0;
+  margin-bottom:0;
+  overflow:hidden;
+}
+
+.private-tools-floating{
+  position:fixed !important;
+  left:22px;
+  right:22px;
+  top:var(--neo-private-tools-top, 172px);
+  z-index:55;
+  margin:0 !important;
+  padding:8px 22px !important;
+  background:rgba(5,15,10,.96);
+  backdrop-filter:blur(8px);
+  box-shadow:0 12px 38px rgba(0,0,0,.55);
+  transition:
+    opacity .22s ease,
+    transform .22s ease;
+}
+
+.private-tools-floating.neo-top-hidden{
+  opacity:0;
+  transform:translateY(-12px);
+  pointer-events:none;
+}
+
+.private-tools-floating > .compact-toggle{
+  margin:0 !important;
+}
+
+.private-tools-floating .compact-body.open{
+  margin-top:10px;
+}
