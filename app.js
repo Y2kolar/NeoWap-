@@ -30,7 +30,10 @@ async function login() {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ nick, password })
+      body: JSON.stringify({
+        nick,
+        password
+      })
     });
 
     const data = await res.json();
@@ -50,6 +53,8 @@ async function login() {
     document.getElementById("topUser").innerText = data.user.nick;
 
   } catch (e) {
+    console.error("LOGIN TEST ERROR:", e);
+
     ok.innerText = "";
     error.innerText = "Сервер не отвечает или app.js не может вызвать /auth.";
   }
