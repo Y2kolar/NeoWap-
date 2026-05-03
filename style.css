@@ -536,3 +536,37 @@ body{
   line-height:1.45;
   margin-bottom:10px;
 }
+
+.sabrina-panel{
+  border-color:rgba(110,255,158,.22);
+}
+
+.sabrina-settings{
+  margin-top:10px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.sabrina-check{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px;
+  border:1px solid rgba(61,220,132,.14);
+  border-radius:10px;
+  background:#0c120f;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.35;
+}
+
+.sabrina-check input{
+  width:18px;
+  height:18px;
+  accent-color:var(--accent2);
+}
+
+.sabrina-check span{
+  flex:1;
+}
