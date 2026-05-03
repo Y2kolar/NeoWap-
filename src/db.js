@@ -87,6 +87,16 @@ async function initDb() {
     );
   `);
 
+  await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';`);
+  await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS ai_verdict TEXT;`);
+  await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS ai_confidence INTEGER;`);
+  await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS ai_action TEXT;`);
+  await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS ai_notes TEXT;`);
+  await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS review_required BOOLEAN DEFAULT true;`);
+  await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS processed_at TIMESTAMP;`);
+  await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS admin_reviewed_by TEXT;`);
+  await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS admin_reviewed_at TIMESTAMP;`);
+
   console.log("Database ready");
 }
 
