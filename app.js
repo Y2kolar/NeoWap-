@@ -2033,3 +2033,42 @@ if (!window.__NEOWAP_INSTANT_MESSAGES_V20__) {
     addSystem("Сообщение показано у тебя. Отправлю на сервер, когда связь восстановится.");
   };
 }
+
+/* === NeoWAP v21: mobile keyboard composition fix === */
+
+if (!window.__NEOWAP_MOBILE_INPUT_FIX_V21__) {
+  window.__NEOWAP_MOBILE_INPUT_FIX_V21__ = true;
+
+  let neoInputComposing = false;
+
+  function bindMobileInputFix() {
+    const input = document.getElementById("msgInput");
+
+    if (!input || input.__neoCompositionBound) return;
+
+    input.__neoCompositionBound = true;
+
+    input.addEventListener("compositionstart", () => {
+      neoInputComposing = true;
+    });
+
+    input.addEventListener("compositionend", () => {
+      neoInputComposing = false;
+    });
+  }
+
+  const oldSendMessageV21 = sendMessage;
+
+  window.sendMessage = sendMessage = function () {
+    bindMobileInputFix();
+
+    const delay = neoInputComposing ? 140 : 45;
+
+    setTimeout(() => {
+      oldSendMessageV21();
+    }, delay);
+  };
+
+  document.addEventListener("DOMContentLoaded", bindMobileInputFix);
+  setTimeout(bindMobileInputFix, 500);
+}
