@@ -1513,3 +1513,145 @@ window.onload = async function () {
     showScreen("loginScreen");
   }
 };
+
+/* === NeoWAP v18: notifications + report status refresh === */
+
+if (!window.__NEOWAP_NOTIFICATIONS_V18__) {
+  window.__NEOWAP_NOTIFICATIONS_V18__ = true;
+
+  function ensureNotificationBox() {
+    let box = document.getElementById("neoNotificationBox");
+
+    if (box) return box;
+
+    box = document.createElement("div");
+    box.id = "neoNotificationBox";
+    box.className = "neo-notification-box";
+
+    document.body.appendChild(box);
+
+    return box;
+  }
+
+  async function loadMyNotifications() {
+    if (!currentUser) return;
+
+    try {
+      const res = await fetch(
+        SERVER_URL + "/notifications/" + encodeURIComponent(currentUser.nick)
+      );
+
+      const data = await res.json();
+
+      if (!data.ok || !Array.isArray(data.notifications)) return;
+
+      data.notifications.forEach((n) => {
+        showNeoNotification(n);
+      });
+
+    } catch (e) {}
+  }
+
+  function showNeoNotification(notification) {
+    const box = ensureNotificationBox();
+
+    const div = document.createElement("div");
+    div.className = "neo-notification";
+
+    div.innerHTML = `
+      <div class="neo-notification-title">
+        ${escapeHtml(notification.title || "NeoWAP")}
+      </div>
+
+      <div class="neo-notification-body">
+        ${escapeHtml(notification.body || "")}
+      </div>
+
+      <button class="btn secondary" onclick="markNotificationRead(${notification.id}, this)">
+        OK
+      </button>
+    `;
+
+    box.appendChild(div);
+  }
+
+  window.markNotificationRead = async function (id, button) {
+    try {
+      await fetch(SERVER_URL + "/notifications/" + id + "/read", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          nick: currentUser.nick
+        })
+      });
+    } catch (e) {}
+
+    const card = button.closest(".neo-notification");
+
+    if (card) {
+      card.remove();
+    }
+  };
+
+  const oldAfterLoginV18 = afterLogin;
+
+  window.afterLogin = afterLogin = async function () {
+    await oldAfterLoginV18();
+
+    await loadMyNotifications();
+
+    if (!window.__NEOWAP_NOTIFICATION_TIMER__) {
+      window.__NEOWAP_NOTIFICATION_TIMER__ = setInterval(() => {
+        loadMyNotifications();
+      }, 30000);
+    }
+  };
+
+  const oldAdminReportActionV18 = adminReportAction;
+
+  window.adminReportAction = adminReportAction = async function (id, action) {
+    const ok = confirm("Применить действие к жалобе #" + id + "?");
+
+    if (!ok) return;
+
+    const detail = document.getElementById("adminReportDetail");
+
+    try {
+      const res = await fetch(SERVER_URL + "/admin/reports/" + id + "/action", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          adminNick: currentUser.nick,
+          action: action
+        })
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        appendAdminLog(data.error || "Ошибка действия.");
+        return;
+      }
+
+      appendAdminLog("Жалоба #" + id + ": " + data.message);
+
+      await loadAdminReports();
+      await loadAdminReportDetail(id);
+
+      if (detail) {
+        detail.innerHTML += `
+          <div class="rules-small">
+            ✅ ${escapeHtml(data.message)}
+          </div>
+        `;
+      }
+
+    } catch (e) {
+      appendAdminLog("Ошибка соединения с сервером.");
+    }
+  };
+}
