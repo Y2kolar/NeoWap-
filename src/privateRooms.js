@@ -127,10 +127,43 @@ async function createPrivateReport(code, reporterNick, targetNick, reason) {
   const cleanCode = normalizePrivateCode(code);
 
   const result = await pool.query(
-    `INSERT INTO private_reports (code, reporter_nick, target_nick, reason)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO private_reports (
+       code,
+       reporter_nick,
+       target_nick,
+       reason,
+       status,
+       review_required
+     )
+     VALUES ($1, $2, $3, $4, 'pending', true)
      RETURNING *`,
     [cleanCode, reporterNick, targetNick, reason || "без причины"]
+  );
+
+  return result.rows[0];
+}
+
+async function getRecentPrivateReports(limit = 20) {
+  const result = await pool.query(
+    `SELECT *
+     FROM private_reports
+     ORDER BY id DESC
+     LIMIT $1`,
+    [limit]
+  );
+
+  return result.rows;
+}
+
+async function markPrivateReportStatus(id, status, adminNick) {
+  const result = await pool.query(
+    `UPDATE private_reports
+     SET status = $1,
+         admin_reviewed_by = $2,
+         admin_reviewed_at = NOW()
+     WHERE id = $3
+     RETURNING *`,
+    [status, adminNick, id]
   );
 
   return result.rows[0];
@@ -149,5 +182,7 @@ module.exports = {
   removePrivateMember,
   privateRoomExists,
   closePrivateRoom,
-  createPrivateReport
+  createPrivateReport,
+  getRecentPrivateReports,
+  markPrivateReportStatus
 };
