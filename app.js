@@ -777,4 +777,40 @@ function sendMessage() {
   if (!currentRoom) {
     input.value = text;
     appendPrivateLog("Сначала войди в комнату.");
-   
+window.login = login;
+window.goHome = goHome;
+window.goChat = goChat;
+window.goProfile = goProfile;
+window.logout = logout;
+
+window.sendMessage = sendMessage;
+window.sendTyping = sendTyping;
+
+window.togglePrivateCreateBlock = togglePrivateCreateBlock;
+window.createPrivateInvite = createPrivateInvite;
+window.joinPrivateByCode = joinPrivateByCode;
+window.joinPrivateByCodeValue = joinPrivateByCodeValue;
+window.inviteMoreToCurrentPrivate = inviteMoreToCurrentPrivate;
+window.requestPrivateMembers = requestPrivateMembers;
+window.reportPrivateRoom = reportPrivateRoom;
+window.leavePrivateForever = leavePrivateForever;
+window.closePrivateRoom = closePrivateRoom;
+window.leavePrivateFromList = leavePrivateFromList;
+window.closePrivateFromList = closePrivateFromList;
+
+window.acceptPrivateInvite = acceptPrivateInvite;
+window.declinePrivateInvite = declinePrivateInvite;
+
+window.adminTrust = adminTrust;
+window.adminWarn = adminWarn;
+window.adminMute = adminMute;
+window.adminBan = adminBan;
+window.adminPermBan = adminPermBan;
+window.adminUnban = adminUnban;
+window.adminSetTrust = adminSetTrust;
+window.adminSetStatus = adminSetStatus;
+
+window.loadAdminReports = loadAdminReports;
+window.loadAdminReportDetail = loadAdminReportDetail;
+window.adminReportAction = adminReportAction;
+    
