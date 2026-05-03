@@ -1655,3 +1655,295 @@ if (!window.__NEOWAP_NOTIFICATIONS_V18__) {
     }
   };
 }
+
+/* === NeoWAP v19: Sabrina Memory UI === */
+
+if (!window.__NEOWAP_SABRINA_MEMORY_V19__) {
+  window.__NEOWAP_SABRINA_MEMORY_V19__ = true;
+
+  let sabrinaProfileCache = null;
+
+  function ensureSabrinaPanel() {
+    const profileScreen = document.getElementById("profileScreen");
+
+    if (!profileScreen || document.getElementById("sabrinaPanel")) return;
+
+    const panel = document.createElement("div");
+    panel.id = "sabrinaPanel";
+    panel.className = "card sabrina-panel";
+
+    panel.innerHTML = `
+      <div class="title">Sabrina Memory</div>
+
+      <div class="subtitle" id="sabrinaGreeting">
+        Sabrina пока загружается...
+      </div>
+
+      <div class="sabrina-settings">
+        <label class="sabrina-check">
+          <input type="checkbox" id="sabrinaRemember">
+          <span>Помнить мои предпочтения</span>
+        </label>
+
+        <label class="sabrina-check">
+          <input type="checkbox" id="sabrinaHints">
+          <span>Мягкие подсказки</span>
+        </label>
+
+        <label class="sabrina-check">
+          <input type="checkbox" id="sabrinaMatch">
+          <span>Предлагать мне людей для общения</span>
+        </label>
+
+        <label class="sabrina-check">
+          <input type="checkbox" id="sabrinaSuggestMe">
+          <span>Можно предлагать меня другим</span>
+        </label>
+
+        <label class="sabrina-check">
+          <input type="checkbox" id="sabrinaQuiet">
+          <span>Тихий режим Sabrina</span>
+        </label>
+      </div>
+
+      <button class="btn secondary" onclick="saveSabrinaSettings()">
+        Сохранить настройки Sabrina
+      </button>
+
+      <button class="btn secondary" onclick="loadSabrinaMatches()">
+        Найти похожих людей
+      </button>
+
+      <div class="private-log" id="sabrinaLog">
+        Sabrina будет мягко запоминать твой ритм в NeoWAP.
+      </div>
+    `;
+
+    const adminPanel = document.getElementById("adminPanel");
+
+    if (adminPanel) {
+      profileScreen.insertBefore(panel, adminPanel);
+    } else {
+      profileScreen.appendChild(panel);
+    }
+  }
+
+  async function loadSabrinaProfile() {
+    if (!currentUser) return;
+
+    ensureSabrinaPanel();
+
+    try {
+      const res = await fetch(
+        SERVER_URL + "/sabrina/profile/" + encodeURIComponent(currentUser.nick)
+      );
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        appendSabrinaLog(data.error || "Sabrina не смогла загрузить профиль.");
+        return;
+      }
+
+      sabrinaProfileCache = data.profile;
+
+      renderSabrinaProfile(data.profile);
+
+    } catch (e) {
+      appendSabrinaLog("Sabrina пока не отвечает.");
+    }
+  }
+
+  function renderSabrinaProfile(profile) {
+    if (!profile) return;
+
+    const greeting = document.getElementById("sabrinaGreeting");
+
+    if (greeting) {
+      greeting.innerHTML = `
+        ${escapeHtml(profile.greeting || "Sabrina рядом.")}<br><br>
+        Любимая комната: <b>${escapeHtml(profile.favorite_room || "ещё не выбрана")}</b><br>
+        Последняя комната: <b>${escapeHtml(profile.last_room || "ещё нет")}</b><br>
+        Заходов в комнаты: <b>${Number(profile.visits_count || 0)}</b>
+      `;
+    }
+
+    setChecked("sabrinaRemember", profile.remember_enabled);
+    setChecked("sabrinaHints", profile.hints_enabled);
+    setChecked("sabrinaMatch", profile.match_enabled);
+    setChecked("sabrinaSuggestMe", profile.can_be_suggested);
+    setChecked("sabrinaQuiet", profile.quiet_mode);
+  }
+
+  function setChecked(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.checked = Boolean(value);
+  }
+
+  function getChecked(id) {
+    const el = document.getElementById(id);
+    return el ? Boolean(el.checked) : false;
+  }
+
+  function appendSabrinaLog(text) {
+    const log = document.getElementById("sabrinaLog");
+
+    if (!log) return;
+
+    if (log.innerText === "Sabrina будет мягко запоминать твой ритм в NeoWAP.") {
+      log.innerText = "";
+    }
+
+    log.innerText += text + "\n";
+    log.scrollTop = log.scrollHeight;
+  }
+
+  window.saveSabrinaSettings = async function () {
+    if (!currentUser) return;
+
+    try {
+      const res = await fetch(
+        SERVER_URL + "/sabrina/profile/" + encodeURIComponent(currentUser.nick) + "/settings",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            remember_enabled: getChecked("sabrinaRemember"),
+            hints_enabled: getChecked("sabrinaHints"),
+            match_enabled: getChecked("sabrinaMatch"),
+            can_be_suggested: getChecked("sabrinaSuggestMe"),
+            quiet_mode: getChecked("sabrinaQuiet")
+          })
+        }
+      );
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        appendSabrinaLog(data.error || "Не удалось сохранить настройки.");
+        return;
+      }
+
+      sabrinaProfileCache = data.profile;
+      renderSabrinaProfile(data.profile);
+
+      appendSabrinaLog("Sabrina: настройки сохранены.");
+
+    } catch (e) {
+      appendSabrinaLog("Sabrina: ошибка соединения при сохранении.");
+    }
+  };
+
+  async function trackSabrinaRoom(room) {
+    if (!currentUser || !room) return;
+
+    try {
+      const res = await fetch(SERVER_URL + "/sabrina/track-room", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          nick: currentUser.nick,
+          room: room
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.ok && data.profile) {
+        sabrinaProfileCache = data.profile;
+      }
+
+    } catch (e) {}
+  }
+
+  window.loadSabrinaMatches = async function () {
+    if (!currentUser) return;
+
+    ensureSabrinaPanel();
+
+    try {
+      const res = await fetch(
+        SERVER_URL + "/sabrina/matches/" + encodeURIComponent(currentUser.nick)
+      );
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        appendSabrinaLog(data.error || "Sabrina не смогла подобрать людей.");
+        return;
+      }
+
+      if (!data.matches || !data.matches.length) {
+        appendSabrinaLog(data.message || "Sabrina пока не нашла похожих людей.");
+        return;
+      }
+
+      appendSabrinaLog("Sabrina нашла похожих людей:");
+
+      data.matches.forEach((m) => {
+        appendSabrinaLog(
+          "— " +
+          m.nick +
+          " · " +
+          (m.reason || "похожий ритм") +
+          (m.favorite_room ? " · любимая комната: " + m.favorite_room : "")
+        );
+      });
+
+    } catch (e) {
+      appendSabrinaLog("Sabrina: ошибка поиска похожих людей.");
+    }
+  };
+
+  const oldAfterLoginSabrina = afterLogin;
+
+  window.afterLogin = afterLogin = async function () {
+    await oldAfterLoginSabrina();
+    await loadSabrinaProfile();
+  };
+
+  const oldGoProfileSabrina = goProfile;
+
+  window.goProfile = goProfile = function () {
+    oldGoProfileSabrina();
+    ensureSabrinaPanel();
+    loadSabrinaProfile();
+  };
+
+  const oldEnterRoomSabrina = enterRoom;
+
+  window.enterRoom = enterRoom = async function (roomId) {
+    await oldEnterRoomSabrina(roomId);
+    await trackSabrinaRoom(roomId);
+
+    if (
+      sabrinaProfileCache &&
+      sabrinaProfileCache.hints_enabled &&
+      !sabrinaProfileCache.quiet_mode
+    ) {
+      if (roomId === sabrinaProfileCache.favorite_room) {
+        setTimeout(() => {
+          addMessage(
+            "Sabrina",
+            "Похоже, эта комната тебе уже знакома. Я запомнила твой ритм.",
+            false,
+            "NeoWAP Memory"
+          );
+        }, 900);
+      }
+    }
+  };
+
+  const oldEnterPrivateRoomSabrina = enterPrivateRoom;
+
+  window.enterPrivateRoom = enterPrivateRoom = async function (roomId, code) {
+    await oldEnterPrivateRoomSabrina(roomId, code);
+    await trackSabrinaRoom("private");
+  };
+
+  window.loadSabrinaProfile = loadSabrinaProfile;
+}
