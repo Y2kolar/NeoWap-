@@ -284,6 +284,76 @@ function setupRoutes(app, options = {}) {
     }
   });
 
+  app.get("/notifications/:nick", async (req, res) => {
+    try {
+      const nick = String(req.params.nick || "").trim();
+
+      if (!nick) {
+        return res.status(400).json({
+          ok: false,
+          error: "Нужен ник"
+        });
+      }
+
+      const result = await pool.query(
+        `SELECT *
+         FROM notifications
+         WHERE lower(nick) = lower($1)
+         AND is_read = false
+         ORDER BY id DESC
+         LIMIT 20`,
+        [nick]
+      );
+
+      res.json({
+        ok: true,
+        notifications: result.rows
+      });
+
+    } catch (e) {
+      console.error("NOTIFICATIONS ERROR:", e);
+
+      res.status(500).json({
+        ok: false,
+        error: "Ошибка загрузки уведомлений"
+      });
+    }
+  });
+
+  app.post("/notifications/:id/read", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const nick = String(req.body.nick || "").trim();
+
+      if (!id || !nick) {
+        return res.status(400).json({
+          ok: false,
+          error: "Нужен id и ник"
+        });
+      }
+
+      await pool.query(
+        `UPDATE notifications
+         SET is_read = true
+         WHERE id = $1
+         AND lower(nick) = lower($2)`,
+        [id, nick]
+      );
+
+      res.json({
+        ok: true
+      });
+
+    } catch (e) {
+      console.error("NOTIFICATION READ ERROR:", e);
+
+      res.status(500).json({
+        ok: false,
+        error: "Ошибка обновления уведомления"
+      });
+    }
+  });
+
   app.get("/admin/reports", async (req, res) => {
     try {
       const admin = await requireAdmin(req.query.admin);
@@ -505,6 +575,29 @@ function setupRoutes(app, options = {}) {
           id
         ]
       );
+
+      if (action === "no_violation") {
+        await createNotification(
+          report.reporter_nick,
+          "report_result",
+          "Жалоба рассмотрена",
+          `Жалоба #${id} закрыта: нарушение не подтверждено.`
+        );
+      } else {
+        await createNotification(
+          report.target_nick,
+          "moderation_action",
+          "Sabrina Moderator",
+          `По жалобе #${id}: ${message}`
+        );
+
+        await createNotification(
+          report.reporter_nick,
+          "report_result",
+          "Жалоба рассмотрена",
+          `Жалоба #${id} рассмотрена. По ней принято действие.`
+        );
+      }
 
       res.json({
         ok: true,
