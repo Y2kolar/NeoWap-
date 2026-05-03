@@ -4,6 +4,7 @@ const { pool } = require("./db");
 const statusTools = require("./statuses");
 const trustTools = require("./trust");
 const userTools = require("./users");
+const privateRooms = require("./privateRooms");
 
 function getEarnedStatus(count) {
   return statusTools.getEarnedStatus(count);
@@ -25,8 +26,11 @@ async function touchUser(nick) {
   return userTools.touchUser(nick);
 }
 
-function setupRoutes(app, options = {}) {
-  const getRoomsOnline = options.getRoomsOnline || (() => ({function addHours(hours) {
+async function getUserByNick(nick) {
+  return userTools.getUserByNick(nick);
+}
+
+function addHours(hours) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
@@ -36,6 +40,9 @@ async function requireAdmin(adminNick) {
   if (!cleanNick) return null;
 
   let user = await getUserByNick(cleanNick);
+
+  if (!user) return null;
+
   user = await ensureAdmin(user);
 
   if (!user || user.role !== "admin") return null;
@@ -43,243 +50,8 @@ async function requireAdmin(adminNick) {
   return user;
 }
 
-app.get("/admin/reports", async (req, res) => {
-  try {
-    const admin = await requireAdmin(req.query.admin);
-
-    if (!admin) {
-      return res.status(403).json({
-        ok: false,
-        error: "Нет прав администратора"
-      });
-    }
-
-    const result = await pool.query(
-      `SELECT id, code, reporter_nick, target_nick, reason, status,
-              review_required, created_at, processed_at,
-              admin_reviewed_by, admin_reviewed_at
-       FROM private_reports
-       ORDER BY id DESC
-       LIMIT 50`
-    );
-
-    res.json({
-      ok: true,
-      reports: result.rows
-    });
-
-  } catch (e) {
-    console.error("ADMIN REPORTS ERROR:", e);
-
-    res.status(500).json({
-      ok: false,
-      error: "Ошибка загрузки жалоб"
-    });
-  }
-});
-
-app.get("/admin/reports/:id", async (req, res) => {
-  try {
-    const admin = await requireAdmin(req.query.admin);
-
-    if (!admin) {
-      return res.status(403).json({
-        ok: false,
-        error: "Нет прав администратора"
-      });
-    }
-
-    const id = Number(req.params.id);
-
-    if (!id) {
-      return res.status(400).json({
-        ok: false,
-        error: "Некорректный id жалобы"
-      });
-    }
-
-    const reportResult = await pool.query(
-      `SELECT *
-       FROM private_reports
-       WHERE id = $1
-       LIMIT 1`,
-      [id]
-    );
-
-    const report = reportResult.rows[0];
-
-    if (!report) {
-      return res.status(404).json({
-        ok: false,
-        error: "Жалоба не найдена"
-      });
-    }
-
-    const roomId = privateRooms.privateRoomId(report.code);
-
-    const contextResult = await pool.query(
-      `SELECT user_nick, text, created_at
-       FROM messages
-       WHERE room = $1
-       ORDER BY id DESC
-       LIMIT 20`,
-      [roomId]
-    );
-
-    res.json({
-      ok: true,
-      report,
-      context: contextResult.rows.reverse()
-    });
-
-  } catch (e) {
-    console.error("ADMIN REPORT DETAIL ERROR:", e);
-
-    res.status(500).json({
-      ok: false,
-      error: "Ошибка загрузки жалобы"
-    });
-  }
-});
-
-app.post("/admin/reports/:id/action", async (req, res) => {
-  try {
-    const { adminNick, action, note } = req.body;
-
-    const admin = await requireAdmin(adminNick);
-
-    if (!admin) {
-      return res.status(403).json({
-        ok: false,
-        error: "Нет прав администратора"
-      });
-    }
-
-    const id = Number(req.params.id);
-
-    if (!id) {
-      return res.status(400).json({
-        ok: false,
-        error: "Некорректный id жалобы"
-      });
-    }
-
-    const reportResult = await pool.query(
-      `SELECT *
-       FROM private_reports
-       WHERE id = $1
-       LIMIT 1`,
-      [id]
-    );
-
-    const report = reportResult.rows[0];
-
-    if (!report) {
-      return res.status(404).json({
-        ok: false,
-        error: "Жалоба не найдена"
-      });
-    }
-
-    let status = "reviewed";
-    let deltaTrust = 0;
-    let warningsInc = 0;
-    let mutesInc = 0;
-    let bansInc = 0;
-    let mutedUntil = null;
-    let banUntil = null;
-    let message = "Действие применено.";
-
-    if (action === "no_violation") {
-      status = "closed_no_violation";
-      message = "Жалоба закрыта: нарушение не подтверждено.";
-    } else if (action === "warn") {
-      status = "action_warn";
-      deltaTrust = -5;
-      warningsInc = 1;
-      message = "Выдано предупреждение, trust -5.";
-    } else if (action === "mute_1h") {
-      status = "action_mute_1h";
-      deltaTrust = -10;
-      mutesInc = 1;
-      mutedUntil = addHours(1);
-      message = "Выдан мут на 1 час, trust -10.";
-    } else if (action === "mute_10h") {
-      status = "action_mute_10h";
-      deltaTrust = -25;
-      mutesInc = 1;
-      mutedUntil = addHours(10);
-      message = "Выдан мут на 10 часов, trust -25.";
-    } else if (action === "ban_1d") {
-      status = "action_ban_1d";
-      deltaTrust = -35;
-      bansInc = 1;
-      banUntil = addHours(24);
-      message = "Выдан бан на 1 день, trust -35.";
-    } else {
-      return res.status(400).json({
-        ok: false,
-        error: "Неизвестное действие"
-      });
-    }
-
-    if (action !== "no_violation") {
-      await pool.query(
-        `UPDATE users
-         SET trust_score = LEAST(100, GREATEST(0, COALESCE(trust_score, 35) + $1)),
-             warnings_count = COALESCE(warnings_count, 0) + $2,
-             mutes_count = COALESCE(mutes_count, 0) + $3,
-             bans_count = COALESCE(bans_count, 0) + $4,
-             muted_until = CASE WHEN $5::timestamp IS NULL THEN muted_until ELSE $5::timestamp END,
-             ban_until = CASE WHEN $6::timestamp IS NULL THEN ban_until ELSE $6::timestamp END
-         WHERE lower(nick) = lower($7)`,
-        [
-          deltaTrust,
-          warningsInc,
-          mutesInc,
-          bansInc,
-          mutedUntil,
-          banUntil,
-          report.target_nick
-        ]
-      );
-    }
-
-    const updatedReport = await pool.query(
-      `UPDATE private_reports
-       SET status = $1,
-           ai_action = $2,
-           ai_notes = $3,
-           review_required = false,
-           processed_at = NOW(),
-           admin_reviewed_by = $4,
-           admin_reviewed_at = NOW()
-       WHERE id = $5
-       RETURNING *`,
-      [
-        status,
-        action,
-        note || message,
-        admin.nick,
-        id
-      ]
-    );
-
-    res.json({
-      ok: true,
-      message,
-      report: updatedReport.rows[0]
-    });
-
-  } catch (e) {
-    console.error("ADMIN REPORT ACTION ERROR:", e);
-
-    res.status(500).json({
-      ok: false,
-      error: "Ошибка применения действия"
-    });
-  }
-});}));
+function setupRoutes(app, options = {}) {
+  const getRoomsOnline = options.getRoomsOnline || (() => ({}));
 
   app.get("/", (req, res) => {
     res.send("NeoWAP server online");
@@ -341,8 +113,8 @@ app.post("/admin/reports/:id/action", async (req, res) => {
           user: {
             ...user,
             active_status: getActiveStatus(user),
-            earned_status: getEarnedStatus(user.messages_count),
-            trust_level: getTrustLevel(user.trust_score)
+            earned_status: getEarnedStatus(user.messages_count || 0),
+            trust_level: getTrustLevel(user.trust_score || 35)
           }
         });
       }
@@ -383,8 +155,8 @@ app.post("/admin/reports/:id/action", async (req, res) => {
         user: {
           ...user,
           active_status: getActiveStatus(user),
-          earned_status: getEarnedStatus(user.messages_count),
-          trust_level: getTrustLevel(user.trust_score)
+          earned_status: getEarnedStatus(user.messages_count || 0),
+          trust_level: getTrustLevel(user.trust_score || 35)
         }
       });
 
@@ -431,7 +203,8 @@ app.post("/admin/reports/:id/action", async (req, res) => {
       console.error("MESSAGES ERROR:", e);
 
       res.status(500).json({
-        ok: false
+        ok: false,
+        error: "Ошибка загрузки сообщений"
       });
     }
   });
@@ -479,7 +252,8 @@ app.post("/admin/reports/:id/action", async (req, res) => {
       const result = await pool.query(
         `SELECT prm.code, prm.role, prm.joined_at, pr.created_by, pr.is_active
          FROM private_room_members prm
-         LEFT JOIN private_rooms pr ON pr.code = prm.code
+         LEFT JOIN private_rooms pr
+         ON pr.code = prm.code
          WHERE lower(prm.nick) = lower($1)
          AND pr.is_active = true
          ORDER BY prm.joined_at DESC
@@ -498,6 +272,244 @@ app.post("/admin/reports/:id/action", async (req, res) => {
       res.status(500).json({
         ok: false,
         error: "Ошибка загрузки приватных комнат"
+      });
+    }
+  });
+
+  app.get("/admin/reports", async (req, res) => {
+    try {
+      const admin = await requireAdmin(req.query.admin);
+
+      if (!admin) {
+        return res.status(403).json({
+          ok: false,
+          error: "Нет прав администратора"
+        });
+      }
+
+      const result = await pool.query(
+        `SELECT id, code, reporter_nick, target_nick, reason, status,
+                review_required, created_at, processed_at,
+                admin_reviewed_by, admin_reviewed_at
+         FROM private_reports
+         ORDER BY id DESC
+         LIMIT 50`
+      );
+
+      res.json({
+        ok: true,
+        reports: result.rows
+      });
+
+    } catch (e) {
+      console.error("ADMIN REPORTS ERROR:", e);
+
+      res.status(500).json({
+        ok: false,
+        error: "Ошибка загрузки жалоб"
+      });
+    }
+  });
+
+  app.get("/admin/reports/:id", async (req, res) => {
+    try {
+      const admin = await requireAdmin(req.query.admin);
+
+      if (!admin) {
+        return res.status(403).json({
+          ok: false,
+          error: "Нет прав администратора"
+        });
+      }
+
+      const id = Number(req.params.id);
+
+      if (!id) {
+        return res.status(400).json({
+          ok: false,
+          error: "Некорректный id жалобы"
+        });
+      }
+
+      const reportResult = await pool.query(
+        `SELECT *
+         FROM private_reports
+         WHERE id = $1
+         LIMIT 1`,
+        [id]
+      );
+
+      const report = reportResult.rows[0];
+
+      if (!report) {
+        return res.status(404).json({
+          ok: false,
+          error: "Жалоба не найдена"
+        });
+      }
+
+      const roomId = privateRooms.privateRoomId(report.code);
+
+      const contextResult = await pool.query(
+        `SELECT user_nick, text, created_at
+         FROM messages
+         WHERE room = $1
+         ORDER BY id DESC
+         LIMIT 20`,
+        [roomId]
+      );
+
+      res.json({
+        ok: true,
+        report,
+        context: contextResult.rows.reverse()
+      });
+
+    } catch (e) {
+      console.error("ADMIN REPORT DETAIL ERROR:", e);
+
+      res.status(500).json({
+        ok: false,
+        error: "Ошибка загрузки жалобы"
+      });
+    }
+  });
+
+  app.post("/admin/reports/:id/action", async (req, res) => {
+    try {
+      const { adminNick, action, note } = req.body;
+
+      const admin = await requireAdmin(adminNick);
+
+      if (!admin) {
+        return res.status(403).json({
+          ok: false,
+          error: "Нет прав администратора"
+        });
+      }
+
+      const id = Number(req.params.id);
+
+      if (!id) {
+        return res.status(400).json({
+          ok: false,
+          error: "Некорректный id жалобы"
+        });
+      }
+
+      const reportResult = await pool.query(
+        `SELECT *
+         FROM private_reports
+         WHERE id = $1
+         LIMIT 1`,
+        [id]
+      );
+
+      const report = reportResult.rows[0];
+
+      if (!report) {
+        return res.status(404).json({
+          ok: false,
+          error: "Жалоба не найдена"
+        });
+      }
+
+      let status = "reviewed";
+      let deltaTrust = 0;
+      let warningsInc = 0;
+      let mutesInc = 0;
+      let bansInc = 0;
+      let mutedUntil = null;
+      let banUntil = null;
+      let message = "Действие применено.";
+
+      if (action === "no_violation") {
+        status = "closed_no_violation";
+        message = "Жалоба закрыта: нарушение не подтверждено.";
+      } else if (action === "warn") {
+        status = "action_warn";
+        deltaTrust = -5;
+        warningsInc = 1;
+        message = "Выдано предупреждение, trust -5.";
+      } else if (action === "mute_1h") {
+        status = "action_mute_1h";
+        deltaTrust = -10;
+        mutesInc = 1;
+        mutedUntil = addHours(1);
+        message = "Выдан мут на 1 час, trust -10.";
+      } else if (action === "mute_10h") {
+        status = "action_mute_10h";
+        deltaTrust = -25;
+        mutesInc = 1;
+        mutedUntil = addHours(10);
+        message = "Выдан мут на 10 часов, trust -25.";
+      } else if (action === "ban_1d") {
+        status = "action_ban_1d";
+        deltaTrust = -35;
+        bansInc = 1;
+        banUntil = addHours(24);
+        message = "Выдан бан на 1 день, trust -35.";
+      } else {
+        return res.status(400).json({
+          ok: false,
+          error: "Неизвестное действие"
+        });
+      }
+
+      if (action !== "no_violation") {
+        await pool.query(
+          `UPDATE users
+           SET trust_score = LEAST(100, GREATEST(0, COALESCE(trust_score, 35) + $1)),
+               warnings_count = COALESCE(warnings_count, 0) + $2,
+               mutes_count = COALESCE(mutes_count, 0) + $3,
+               bans_count = COALESCE(bans_count, 0) + $4,
+               muted_until = CASE WHEN $5::timestamp IS NULL THEN muted_until ELSE $5::timestamp END,
+               ban_until = CASE WHEN $6::timestamp IS NULL THEN ban_until ELSE $6::timestamp END
+           WHERE lower(nick) = lower($7)`,
+          [
+            deltaTrust,
+            warningsInc,
+            mutesInc,
+            bansInc,
+            mutedUntil,
+            banUntil,
+            report.target_nick
+          ]
+        );
+      }
+
+      const updatedReport = await pool.query(
+        `UPDATE private_reports
+         SET status = $1,
+             ai_action = $2,
+             ai_notes = $3,
+             review_required = false,
+             processed_at = NOW(),
+             admin_reviewed_by = $4,
+             admin_reviewed_at = NOW()
+         WHERE id = $5
+         RETURNING *`,
+        [
+          status,
+          action,
+          note || message,
+          admin.nick,
+          id
+        ]
+      );
+
+      res.json({
+        ok: true,
+        message,
+        report: updatedReport.rows[0]
+      });
+
+    } catch (e) {
+      console.error("ADMIN REPORT ACTION ERROR:", e);
+
+      res.status(500).json({
+        ok: false,
+        error: "Ошибка применения действия"
       });
     }
   });
