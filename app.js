@@ -2513,3 +2513,266 @@ if (!window.__NEOWAP_COMPACT_UI_V22__) {
     }, 500);
   });
 }
+
+/* === NeoWAP v23: fix compact buttons === */
+
+if (!window.__NEOWAP_COMPACT_UI_FIX_V23__) {
+  window.__NEOWAP_COMPACT_UI_FIX_V23__ = true;
+
+  function neoMoveBodyChildrenBack(oldBody) {
+    if (!oldBody || !oldBody.parentNode) return;
+
+    while (oldBody.firstChild) {
+      oldBody.parentNode.insertBefore(oldBody.firstChild, oldBody);
+    }
+
+    oldBody.remove();
+  }
+
+  function fixPrivateToolsCompactV23() {
+    try {
+      const tools = document.getElementById("privateTools");
+      const info = document.getElementById("privateRoomInfo");
+
+      if (!tools || !info) return;
+
+      const oldToggle = document.getElementById("privateToolsToggle");
+      const oldBody = document.getElementById("privateToolsBody");
+
+      neoMoveBodyChildrenBack(oldBody);
+
+      if (oldToggle) {
+        oldToggle.remove();
+      }
+
+      const toggle = document.createElement("button");
+      toggle.className = "btn secondary compact-toggle";
+      toggle.id = "privateToolsToggle";
+      toggle.type = "button";
+      toggle.innerText = "Открыть управление комнатой";
+
+      const body = document.createElement("div");
+      body.id = "privateToolsBody";
+      body.className = "compact-body";
+
+      info.insertAdjacentElement("afterend", toggle);
+      toggle.insertAdjacentElement("afterend", body);
+
+      const children = Array.from(tools.children);
+
+      children.forEach((child) => {
+        if (child.classList.contains("title")) return;
+        if (child.id === "privateRoomInfo") return;
+        if (child.id === "privateToolsToggle") return;
+        if (child.id === "privateToolsBody") return;
+
+        body.appendChild(child);
+      });
+
+      toggle.onclick = function () {
+        const opened = body.classList.toggle("open");
+
+        toggle.innerText = opened
+          ? "Скрыть управление комнатой"
+          : "Открыть управление комнатой";
+      };
+
+      body.classList.remove("open");
+      tools.classList.add("private-tools-compact");
+
+    } catch (e) {
+      console.error("PRIVATE COMPACT FIX ERROR:", e);
+    }
+  }
+
+  function fixSabrinaPanelCompactV23() {
+    try {
+      const panel = document.getElementById("sabrinaPanel");
+      const greeting = document.getElementById("sabrinaGreeting");
+
+      if (!panel || !greeting) return;
+
+      const oldToggle = document.getElementById("sabrinaPanelToggle");
+      const oldBody = document.getElementById("sabrinaPanelBody");
+
+      neoMoveBodyChildrenBack(oldBody);
+
+      if (oldToggle) {
+        oldToggle.remove();
+      }
+
+      const toggle = document.createElement("button");
+      toggle.className = "btn secondary compact-toggle";
+      toggle.id = "sabrinaPanelToggle";
+      toggle.type = "button";
+      toggle.innerText = "Открыть Sabrina Memory";
+
+      const body = document.createElement("div");
+      body.id = "sabrinaPanelBody";
+      body.className = "compact-body";
+
+      greeting.insertAdjacentElement("afterend", toggle);
+      toggle.insertAdjacentElement("afterend", body);
+
+      const children = Array.from(panel.children);
+
+      children.forEach((child) => {
+        if (child.classList.contains("title")) return;
+        if (child.id === "sabrinaGreeting") return;
+        if (child.id === "sabrinaPanelToggle") return;
+        if (child.id === "sabrinaPanelBody") return;
+
+        body.appendChild(child);
+      });
+
+      toggle.onclick = function () {
+        const opened = body.classList.toggle("open");
+
+        toggle.innerText = opened
+          ? "Скрыть Sabrina Memory"
+          : "Открыть Sabrina Memory";
+      };
+
+      body.classList.remove("open");
+      panel.classList.add("sabrina-panel-compact");
+
+    } catch (e) {
+      console.error("SABRINA COMPACT FIX ERROR:", e);
+    }
+  }
+
+  function fixAdminReportsPanelV23() {
+    try {
+      const adminPanel = document.getElementById("adminPanel");
+
+      if (!adminPanel) return;
+
+      let box = document.getElementById("adminReportsBox");
+
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "adminReportsBox";
+        box.className = "admin-reports-box admin-reports-box-v22";
+        adminPanel.appendChild(box);
+      }
+
+      box.innerHTML = `
+        <button class="btn secondary" id="adminReportsToggleBtn" type="button">
+          Жалобы
+        </button>
+
+        <div class="admin-reports-window" id="adminReportsWindow">
+          <div class="admin-reports-window-head">
+            <div>
+              <div class="title">Жалобы</div>
+              <div class="subtitle">Активные жалобы и быстрые решения.</div>
+            </div>
+
+            <button class="btn secondary small-btn" id="adminReportsCloseBtn" type="button">
+              Закрыть
+            </button>
+          </div>
+
+          <div class="admin-reports-window-grid">
+            <div class="admin-reports-list" id="adminReportsList">
+              Нажми обновить, чтобы загрузить жалобы.
+            </div>
+
+            <div class="admin-report-detail" id="adminReportDetail">
+              Открой жалобу, чтобы увидеть контекст.
+            </div>
+          </div>
+
+          <button class="btn secondary" id="adminReportsRefreshBtn" type="button">
+            Обновить список
+          </button>
+        </div>
+      `;
+
+      const openBtn = document.getElementById("adminReportsToggleBtn");
+      const closeBtn = document.getElementById("adminReportsCloseBtn");
+      const refreshBtn = document.getElementById("adminReportsRefreshBtn");
+
+      if (openBtn) {
+        openBtn.onclick = function () {
+          toggleAdminReportsPanel(true);
+        };
+      }
+
+      if (closeBtn) {
+        closeBtn.onclick = function () {
+          toggleAdminReportsPanel(false);
+        };
+      }
+
+      if (refreshBtn) {
+        refreshBtn.onclick = function () {
+          loadAdminReports();
+        };
+      }
+
+    } catch (e) {
+      console.error("ADMIN REPORTS FIX ERROR:", e);
+    }
+  }
+
+  window.toggleAdminReportsPanel = async function (forceState) {
+    const win = document.getElementById("adminReportsWindow");
+
+    if (!win) return;
+
+    let opened;
+
+    if (typeof forceState === "boolean") {
+      opened = forceState;
+      win.classList.toggle("open", opened);
+    } else {
+      opened = win.classList.toggle("open");
+    }
+
+    if (opened && typeof loadAdminReports === "function") {
+      await loadAdminReports();
+    }
+  };
+
+  const oldEnterPrivateRoomV23 = enterPrivateRoom;
+
+  window.enterPrivateRoom = enterPrivateRoom = async function (roomId, code) {
+    await oldEnterPrivateRoomV23(roomId, code);
+
+    setTimeout(() => {
+      fixPrivateToolsCompactV23();
+    }, 100);
+  };
+
+  const oldGoProfileV23 = goProfile;
+
+  window.goProfile = goProfile = function () {
+    oldGoProfileV23();
+
+    setTimeout(() => {
+      fixSabrinaPanelCompactV23();
+      fixAdminReportsPanelV23();
+    }, 200);
+  };
+
+  const oldLoadSabrinaProfileV23 = window.loadSabrinaProfile;
+
+  if (typeof oldLoadSabrinaProfileV23 === "function") {
+    window.loadSabrinaProfile = async function () {
+      await oldLoadSabrinaProfileV23();
+
+      setTimeout(() => {
+        fixSabrinaPanelCompactV23();
+      }, 200);
+    };
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => {
+      fixPrivateToolsCompactV23();
+      fixSabrinaPanelCompactV23();
+      fixAdminReportsPanelV23();
+    }, 700);
+  });
+}
