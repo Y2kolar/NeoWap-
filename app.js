@@ -2776,3 +2776,129 @@ if (!window.__NEOWAP_COMPACT_UI_FIX_V23__) {
     }, 700);
   });
 }
+
+/* === NeoWAP v24: private room compact header === */
+
+if (!window.__NEOWAP_PRIVATE_COMPACT_V24__) {
+  window.__NEOWAP_PRIVATE_COMPACT_V24__ = true;
+
+  function setPrivateHeaderLineV24(code) {
+    const status = document.getElementById("statusText");
+    if (!status) return;
+
+    const cleanCode = String(code || currentPrivateCode || "")
+      .replace("private:", "")
+      .toUpperCase();
+
+    status.classList.add("private-status-line");
+    status.innerHTML =
+      "🔒 Закрытая комната · " +
+      escapeHtml(cleanCode) +
+      " · Приватный разговор";
+  }
+
+  function clearPrivateHeaderLineV24() {
+    const status = document.getElementById("statusText");
+    if (!status) return;
+
+    status.classList.remove("private-status-line");
+  }
+
+  function moveChildrenOutV24(body) {
+    if (!body || !body.parentNode) return;
+
+    while (body.firstChild) {
+      body.parentNode.insertBefore(body.firstChild, body);
+    }
+
+    body.remove();
+  }
+
+  function compactPrivateToolsV24() {
+    const tools = document.getElementById("privateTools");
+    if (!tools) return;
+
+    const oldToggle = document.getElementById("privateToolsToggle");
+    const oldBody = document.getElementById("privateToolsBody");
+
+    moveChildrenOutV24(oldBody);
+
+    if (oldToggle) {
+      oldToggle.remove();
+    }
+
+    const children = Array.from(tools.children);
+
+    const toggle = document.createElement("button");
+    toggle.className = "btn secondary compact-toggle";
+    toggle.id = "privateToolsToggle";
+    toggle.type = "button";
+    toggle.innerText = "Управление комнатой";
+
+    const body = document.createElement("div");
+    body.id = "privateToolsBody";
+    body.className = "compact-body";
+
+    tools.innerHTML = "";
+    tools.appendChild(toggle);
+    tools.appendChild(body);
+
+    children.forEach((child) => {
+      if (child.id === "privateToolsToggle") return;
+      if (child.id === "privateToolsBody") return;
+
+      body.appendChild(child);
+    });
+
+    toggle.onclick = function () {
+      const opened = body.classList.toggle("open");
+
+      toggle.innerText = opened
+        ? "Скрыть управление комнатой"
+        : "Управление комнатой";
+    };
+
+    body.classList.remove("open");
+    tools.classList.add("private-tools-button-mode");
+  }
+
+  const oldEnterPrivateRoomV24 = enterPrivateRoom;
+
+  window.enterPrivateRoom = enterPrivateRoom = async function (roomId, code) {
+    await oldEnterPrivateRoomV24(roomId, code);
+
+    setPrivateHeaderLineV24(code);
+
+    setTimeout(() => {
+      compactPrivateToolsV24();
+    }, 120);
+  };
+
+  const oldGoChatV24 = goChat;
+
+  window.goChat = goChat = function () {
+    oldGoChatV24();
+
+    if (currentPrivateCode) {
+      setPrivateHeaderLineV24(currentPrivateCode);
+
+      setTimeout(() => {
+        compactPrivateToolsV24();
+      }, 80);
+    }
+  };
+
+  const oldGoHomeV24 = goHome;
+
+  window.goHome = goHome = function () {
+    clearPrivateHeaderLineV24();
+    oldGoHomeV24();
+  };
+
+  const oldEnterRoomV24 = enterRoom;
+
+  window.enterRoom = enterRoom = async function (roomId) {
+    clearPrivateHeaderLineV24();
+    await oldEnterRoomV24(roomId);
+  };
+}
