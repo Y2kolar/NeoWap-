@@ -697,3 +697,30 @@ body{
 .sabrina-panel-compact .subtitle{
   margin-bottom:4px;
 }
+
+/* === NeoWAP v24 private compact header === */
+
+.status.private-status-line{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  line-height:1.4;
+}
+
+.private-tools-button-mode{
+  padding:10px 22px !important;
+  margin-bottom:8px;
+}
+
+.private-tools-button-mode > .compact-toggle{
+  margin:0 !important;
+}
+
+.private-tools-button-mode .compact-body{
+  display:none;
+  margin-top:10px;
+}
+
+.private-tools-button-mode .compact-body.open{
+  display:block;
+}
