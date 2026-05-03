@@ -570,3 +570,130 @@ body{
 .sabrina-check span{
   flex:1;
 }
+
+/* === NeoWAP v22 compact UI === */
+
+.compact-toggle{
+  margin-top:10px;
+}
+
+.compact-body{
+  display:none;
+  margin-top:10px;
+}
+
+.compact-body.open{
+  display:block;
+}
+
+.private-tools-compact{
+  margin-bottom:10px;
+}
+
+.private-tools-compact .subtitle{
+  margin-bottom:4px;
+}
+
+.admin-reports-window{
+  display:none;
+  position:fixed;
+  left:12px;
+  right:12px;
+  top:78px;
+  bottom:82px;
+  z-index:80;
+  padding:14px;
+  border:1px solid rgba(61,220,132,.24);
+  border-radius:18px;
+  background:rgba(5,13,9,.98);
+  box-shadow:0 18px 60px rgba(0,0,0,.72);
+  overflow:auto;
+}
+
+.admin-reports-window.open{
+  display:block;
+}
+
+.admin-reports-window-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+
+.small-btn{
+  width:auto;
+  padding:10px 14px;
+  font-size:13px;
+}
+
+.admin-reports-window-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:12px;
+}
+
+.admin-reports-list,
+.admin-report-detail{
+  min-height:180px;
+  max-height:none;
+  overflow:visible;
+  white-space:normal;
+  padding:10px;
+  border:1px solid rgba(61,220,132,.14);
+  border-radius:14px;
+  background:#0c120f;
+}
+
+.admin-report-card{
+  padding:12px;
+  margin-bottom:10px;
+  border:1px solid rgba(61,220,132,.16);
+  border-radius:14px;
+  background:rgba(7,18,12,.95);
+}
+
+.admin-report-card-title{
+  color:var(--accent);
+  font-size:18px;
+  margin-bottom:6px;
+}
+
+.admin-report-card-text{
+  color:var(--text);
+  font-size:14px;
+  margin-bottom:8px;
+}
+
+.admin-report-card-meta{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.45;
+  margin-bottom:10px;
+}
+
+.report-context-large{
+  max-height:320px;
+  overflow:auto;
+  margin-bottom:12px;
+}
+
+.report-actions{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.empty-state{
+  padding:14px;
+  color:var(--muted);
+  border:1px solid rgba(61,220,132,.12);
+  border-radius:12px;
+  background:#0a120d;
+  line-height:1.45;
+}
+
+.sabrina-panel-compact .subtitle{
+  margin-bottom:4px;
+}
