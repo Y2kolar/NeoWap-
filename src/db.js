@@ -86,7 +86,19 @@ async function initDb() {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
-
+  
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    nick TEXT NOT NULL,
+    type TEXT DEFAULT 'system',
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+`);
+  
   await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';`);
   await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS ai_verdict TEXT;`);
   await pool.query(`ALTER TABLE private_reports ADD COLUMN IF NOT EXISTS ai_confidence INTEGER;`);
