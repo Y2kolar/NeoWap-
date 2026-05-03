@@ -114,18 +114,6 @@ async function emitPrivateMembers(socket, code) {
   });
 }
 
-async function changeTrust(nick, delta) {
-  const result = await pool.query(
-    `UPDATE users
-     SET trust_score = LEAST(100, GREATEST(0, COALESCE(trust_score, 35) + $1))
-     WHERE lower(nick) = lower($2)
-     RETURNING trust_score`,
-    [delta, nick]
-  );
-
-  return result.rows[0]?.trust_score;
-}
-
 function setupSockets(io) {
   io.on("connection", (socket) => {
     console.log("connected", socket.id);
@@ -584,7 +572,10 @@ function setupSockets(io) {
         const targetMember = await privateRooms.isPrivateMember(code, target);
 
         if (!reporterMember || !targetMember) {
-          socket.emit("privateReportResult", "Жалоба доступна только на участника этой приватной комнаты.");
+          socket.emit(
+            "privateReportResult",
+            "Жалоба доступна только на участника этой приватной комнаты."
+          );
           return;
         }
 
@@ -595,9 +586,12 @@ function setupSockets(io) {
           return;
         }
 
-        await privateRooms.createPrivateReport(code, reporter, target, reason);
-
-        const newTrust = await changeTrust(target, -10);
+        const report = await privateRooms.createPrivateReport(
+          code,
+          reporter,
+          target,
+          reason
+        );
 
         await pool.query(
           `UPDATE users
@@ -608,16 +602,19 @@ function setupSockets(io) {
 
         socket.emit(
           "privateReportResult",
-          `Жалоба на ${target} сохранена. Trust: ${newTrust}/100 · ${getTrustLevel(newTrust)}`
+          `Жалоба #${report.id} принята. Статус: pending. Sabrina Moderator проверит контекст перед наказанием.`
         );
 
-        const reportText = `🚩 Жалоба в привате ${code}: ${reporter} → ${target}. Причина: ${reason}`;
+        const reportText =
+          `🚩 Жалоба #${report.id} в привате ${code}: ${reporter} → ${target}. Причина: ${reason}. Статус: pending`;
 
         emitToNick(io, "Admin", "adminPrivateReport", {
+          id: report.id,
           code,
           reporter,
           target,
           reason,
+          status: "pending",
           text: reportText
         });
 
