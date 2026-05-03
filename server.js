@@ -5,6 +5,7 @@ const { Server } = require("socket.io");
 const { initDb } = require("./src/db");
 const sockets = require("./src/sockets");
 const routes = require("./src/routes");
+const sabrinaRoutes = require("./src/sabrinaRoutes");
 
 const app = express();
 
@@ -20,16 +21,13 @@ app.use((req, res, next) => {
   next();
 });
 
-/*
-  Важно:
-  эта строка раздаёт index.html, style.css и app.js из корня проекта.
-  Без неё Telegram может видеть старый кэш или не получать app.js.
-*/
 app.use(express.static(__dirname));
 
 routes.setupRoutes(app, {
   getRoomsOnline: sockets.getRoomsOnline
 });
+
+sabrinaRoutes.setupSabrinaRoutes(app);
 
 const server = http.createServer(app);
 
