@@ -576,55 +576,113 @@ function setupSockets(io) {
             "privateReportResult",
             "Жалоба доступна только на участника этой приватной комнаты."
           );
-          return;
-        }
+socket.on("reportPrivateRoom", async (data) => {
+  try {
+    const code = privateRooms.normalizePrivateCode(data?.code || "");
+    const reporter = String(data?.reporter || "").trim();
+    const target = String(data?.target || "").trim();
+    const reason = String(data?.reason || "").trim() || "без причины";
 
-        const targetUser = await getUserByNick(target);
+    if (!code || !reporter || !target) {
+      socket.emit("privateReportResult", "Нужно указать комнату, себя и пользователя.");
+      return;
+    }
 
-        if (!targetUser) {
-          socket.emit("privateReportResult", "Пользователь не найден.");
-          return;
-        }
+    if (reporter.toLowerCase() === target.toLowerCase()) {
+      socket.emit("privateReportResult", "Нельзя пожаловаться на самого себя.");
+      return;
+    }
 
-        const report = await privateRooms.createPrivateReport(
-          code,
-          reporter,
-          target,
-          reason
-        );
+    const reporterMember = await privateRooms.isPrivateMember(code, reporter);
+    const targetMember = await privateRooms.isPrivateMember(code, target);
 
-        await pool.query(
-          `UPDATE users
-           SET reports_count = COALESCE(reports_count, 0) + 1
-           WHERE lower(nick) = lower($1)`,
-          [target]
-        );
+    if (!reporterMember || !targetMember) {
+      socket.emit(
+        "privateReportResult",
+        "Жалоба доступна только на участника этой приватной комнаты."
+      );
+      return;
+    }
 
-        socket.emit(
-          "privateReportResult",
-          `Жалоба #${report.id} принята. Статус: pending. Sabrina Moderator проверит контекст перед наказанием.`
-        );
+    const targetUser = await getUserByNick(target);
 
-        const reportText =
-          `🚩 Жалоба #${report.id} в привате ${code}: ${reporter} → ${target}. Причина: ${reason}. Статус: pending`;
+    if (!targetUser) {
+      socket.emit("privateReportResult", "Пользователь не найден.");
+      return;
+    }
 
-        emitToNick(io, "Admin", "adminPrivateReport", {
-          id: report.id,
-          code,
-          reporter,
-          target,
-          reason,
-          status: "pending",
-          text: reportText
-        });
+    const report = await privateRooms.createPrivateReport(
+      code,
+      reporter,
+      target,
+      reason
+    );
 
-        emitToNick(io, "Admin", "system", reportText);
+    await pool.query(
+      `UPDATE users
+       SET reports_count = COALESCE(reports_count, 0) + 1
+       WHERE lower(nick) = lower($1)`,
+      [target]
+    );
 
-      } catch (e) {
-        console.error("PRIVATE REPORT ERROR:", e);
-        socket.emit("privateReportResult", "Ошибка отправки жалобы.");
-      }
+    const privateRoomId = privateRooms.privateRoomId(code);
+
+    const contextResult = await pool.query(
+      `SELECT user_nick, text, created_at
+       FROM messages
+       WHERE room = $1
+       ORDER BY id DESC
+       LIMIT 20`,
+      [privateRoomId]
+    );
+
+    const contextMessages = contextResult.rows.reverse();
+
+    const contextText = contextMessages.length
+      ? contextMessages
+          .map((m) => {
+            const time = m.created_at
+              ? new Date(m.created_at).toISOString().slice(11, 16)
+              : "--:--";
+
+            return `[${time}] ${m.user_nick}: ${m.text}`;
+          })
+          .join("\n")
+      : "Контекст пуст: сообщений в этой приватной комнате пока нет.";
+
+    socket.emit(
+      "privateReportResult",
+      `Жалоба #${report.id} принята. Статус: pending. Sabrina Moderator проверит контекст перед наказанием.`
+    );
+
+    const reportText =
+      `🚩 Жалоба #${report.id}\n` +
+      `Комната: ${code}\n` +
+      `Кто пожаловался: ${reporter}\n` +
+      `На кого: ${target}\n` +
+      `Причина: ${reason}\n` +
+      `Статус: pending\n\n` +
+      `Контекст последних 20 сообщений:\n` +
+      `${contextText}`;
+
+    emitToNick(io, "Admin", "adminPrivateReport", {
+      id: report.id,
+      code,
+      reporter,
+      target,
+      reason,
+      status: "pending",
+      context: contextMessages,
+      text: reportText
     });
+
+    emitToNick(io, "Admin", "system", reportText);
+
+  } catch (e) {
+    console.error("PRIVATE REPORT ERROR:", e);
+    socket.emit("privateReportResult", "Ошибка отправки жалобы.");
+  }
+});
 
     socket.on("message", async (data) => {
       try {
