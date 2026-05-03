@@ -2072,3 +2072,444 @@ if (!window.__NEOWAP_MOBILE_INPUT_FIX_V21__) {
   document.addEventListener("DOMContentLoaded", bindMobileInputFix);
   setTimeout(bindMobileInputFix, 500);
 }
+
+/* === NeoWAP v22: compact UI for private tools, Sabrina Memory and admin reports === */
+
+if (!window.__NEOWAP_COMPACT_UI_V22__) {
+  window.__NEOWAP_COMPACT_UI_V22__ = true;
+
+  function moveNodesToBody(parent, startAfterNode, body) {
+    const nodes = [];
+    let take = false;
+
+    Array.from(parent.childNodes).forEach((node) => {
+      if (take) {
+        nodes.push(node);
+      }
+
+      if (node === startAfterNode) {
+        take = true;
+      }
+    });
+
+    nodes.forEach((node) => {
+      body.appendChild(node);
+    });
+  }
+
+  function compactPrivateTools() {
+    const tools = document.getElementById("privateTools");
+    const info = document.getElementById("privateRoomInfo");
+
+    if (!tools || !info || tools.__neoCompactPrivateTools) return;
+
+    tools.__neoCompactPrivateTools = true;
+    tools.classList.add("private-tools-compact");
+
+    const toggle = document.createElement("button");
+    toggle.className = "btn secondary compact-toggle";
+    toggle.id = "privateToolsToggle";
+    toggle.type = "button";
+    toggle.innerText = "Открыть управление комнатой";
+
+    info.insertAdjacentElement("afterend", toggle);
+
+    const body = document.createElement("div");
+    body.id = "privateToolsBody";
+    body.className = "compact-body";
+
+    toggle.insertAdjacentElement("afterend", body);
+
+    moveNodesToBody(tools, toggle, body);
+
+    toggle.onclick = function () {
+      const opened = body.classList.toggle("open");
+
+      toggle.innerText = opened
+        ? "Скрыть управление комнатой"
+        : "Открыть управление комнатой";
+    };
+  }
+
+  function closePrivateToolsBody() {
+    const body = document.getElementById("privateToolsBody");
+    const toggle = document.getElementById("privateToolsToggle");
+
+    if (body) body.classList.remove("open");
+
+    if (toggle) {
+      toggle.innerText = "Открыть управление комнатой";
+    }
+  }
+
+  function compactSabrinaPanel() {
+    const panel = document.getElementById("sabrinaPanel");
+    const greeting = document.getElementById("sabrinaGreeting");
+
+    if (!panel || !greeting || panel.__neoCompactSabrina) return;
+
+    panel.__neoCompactSabrina = true;
+    panel.classList.add("sabrina-panel-compact");
+
+    const toggle = document.createElement("button");
+    toggle.className = "btn secondary compact-toggle";
+    toggle.id = "sabrinaPanelToggle";
+    toggle.type = "button";
+    toggle.innerText = "Открыть Sabrina Memory";
+
+    greeting.insertAdjacentElement("afterend", toggle);
+
+    const body = document.createElement("div");
+    body.id = "sabrinaPanelBody";
+    body.className = "compact-body";
+
+    toggle.insertAdjacentElement("afterend", body);
+
+    moveNodesToBody(panel, toggle, body);
+
+    toggle.onclick = function () {
+      const opened = body.classList.toggle("open");
+
+      toggle.innerText = opened
+        ? "Скрыть Sabrina Memory"
+        : "Открыть Sabrina Memory";
+    };
+  }
+
+  function ensureAdminReportsPanelV22() {
+    if (typeof ensureAdminReportsPanel === "function") {
+      ensureAdminReportsPanel();
+    }
+
+    const box = document.getElementById("adminReportsBox");
+
+    if (!box || box.__neoReportsV22) return;
+
+    box.__neoReportsV22 = true;
+    box.classList.add("admin-reports-box-v22");
+
+    box.innerHTML = `
+      <button class="btn secondary" onclick="toggleAdminReportsPanel()">
+        Жалобы
+      </button>
+
+      <div class="admin-reports-window" id="adminReportsWindow">
+        <div class="admin-reports-window-head">
+          <div>
+            <div class="title">Жалобы</div>
+            <div class="subtitle">Активные жалобы и быстрые решения.</div>
+          </div>
+
+          <button class="btn secondary small-btn" onclick="toggleAdminReportsPanel(false)">
+            Закрыть
+          </button>
+        </div>
+
+        <div class="admin-reports-window-grid">
+          <div class="admin-reports-list" id="adminReportsList">
+            Нажми обновить, чтобы загрузить жалобы.
+          </div>
+
+          <div class="admin-report-detail" id="adminReportDetail">
+            Открой жалобу, чтобы увидеть контекст.
+          </div>
+        </div>
+
+        <button class="btn secondary" onclick="loadAdminReports()">
+          Обновить список
+        </button>
+      </div>
+    `;
+  }
+
+  window.toggleAdminReportsPanel = async function (forceState) {
+    ensureAdminReportsPanelV22();
+
+    const win = document.getElementById("adminReportsWindow");
+
+    if (!win) return;
+
+    let opened;
+
+    if (typeof forceState === "boolean") {
+      opened = forceState;
+      win.classList.toggle("open", opened);
+    } else {
+      opened = win.classList.toggle("open");
+    }
+
+    if (opened) {
+      await loadAdminReports();
+    }
+  };
+
+  window.loadAdminReports = async function () {
+    ensureAdminReportsPanelV22();
+
+    const list = document.getElementById("adminReportsList");
+    const detail = document.getElementById("adminReportDetail");
+
+    if (!list) return;
+
+    if (!currentUser || currentUser.role !== "admin") {
+      list.innerText = "Нет прав администратора.";
+      return;
+    }
+
+    list.innerText = "Загружаю жалобы...";
+
+    try {
+      const res = await fetch(
+        SERVER_URL + "/admin/reports?admin=" + encodeURIComponent(currentUser.nick)
+      );
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        list.innerText = data.error || "Ошибка загрузки жалоб.";
+        return;
+      }
+
+      const activeReports = (data.reports || []).filter((r) => {
+        const status = String(r.status || "pending");
+
+        if (r.review_required === false) return false;
+        if (status.startsWith("closed_")) return false;
+        if (status.startsWith("action_")) return false;
+        if (status === "reviewed") return false;
+
+        return true;
+      });
+
+      if (!activeReports.length) {
+        list.innerHTML = `
+          <div class="empty-state">
+            Активных жалоб нет.
+          </div>
+        `;
+
+        if (detail) {
+          detail.innerHTML = `
+            <div class="empty-state">
+              Обработанные жалобы убраны из активного списка.
+            </div>
+          `;
+        }
+
+        return;
+      }
+
+      let html = "";
+
+      activeReports.forEach((r) => {
+        html += `
+          <div class="admin-report-card">
+            <div class="admin-report-card-title">
+              Жалоба #${r.id}
+            </div>
+
+            <div class="admin-report-card-text">
+              ${escapeHtml(r.reporter_nick)} пожаловался на ${escapeHtml(r.target_nick)}
+            </div>
+
+            <div class="admin-report-card-meta">
+              Комната: ${escapeHtml(r.code)}<br>
+              Причина: ${escapeHtml(r.reason || "без причины")}<br>
+              Статус: ${escapeHtml(r.status || "pending")}
+            </div>
+
+            <button class="btn secondary" onclick="loadAdminReportDetail(${r.id})">
+              Открыть
+            </button>
+          </div>
+        `;
+      });
+
+      list.innerHTML = html;
+
+    } catch (e) {
+      list.innerText = "Ошибка соединения с сервером.";
+    }
+  };
+
+  window.loadAdminReportDetail = async function (id) {
+    ensureAdminReportsPanelV22();
+
+    const detail = document.getElementById("adminReportDetail");
+
+    if (!detail) return;
+
+    detail.innerText = "Загружаю жалобу #" + id + "...";
+
+    try {
+      const res = await fetch(
+        SERVER_URL + "/admin/reports/" + id + "?admin=" + encodeURIComponent(currentUser.nick)
+      );
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        detail.innerText = data.error || "Ошибка загрузки жалобы.";
+        return;
+      }
+
+      const r = data.report;
+      const context = data.context || [];
+
+      const contextHtml = context.length
+        ? context.map((m) => {
+            const time = m.created_at
+              ? new Date(m.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })
+              : "--:--";
+
+            return `
+              <div class="report-message">
+                <b>[${time}] ${escapeHtml(m.user_nick)}:</b>
+                ${escapeHtml(m.text)}
+              </div>
+            `;
+          }).join("")
+        : `<div class="report-message">Контекст пуст.</div>`;
+
+      detail.innerHTML = `
+        <div class="admin-report-detail-card">
+          <div class="title">Жалоба #${r.id}</div>
+
+          <div class="subtitle">
+            Комната: <b>${escapeHtml(r.code)}</b><br>
+            Кто пожаловался: <b>${escapeHtml(r.reporter_nick)}</b><br>
+            На кого: <b>${escapeHtml(r.target_nick)}</b><br>
+            Причина: <b>${escapeHtml(r.reason || "без причины")}</b><br>
+            Статус: <b>${escapeHtml(r.status || "pending")}</b>
+          </div>
+
+          <div class="rules-small">
+            Контекст последних 20 сообщений:
+          </div>
+
+          <div class="report-context report-context-large">
+            ${contextHtml}
+          </div>
+
+          <div class="report-actions">
+            <button class="btn secondary" onclick="adminReportAction(${r.id}, 'no_violation')">
+              Нет нарушения
+            </button>
+
+            <button class="btn secondary" onclick="adminReportAction(${r.id}, 'warn')">
+              Warn / trust -5
+            </button>
+
+            <button class="btn warn" onclick="adminReportAction(${r.id}, 'mute_1h')">
+              Mute 1h / trust -10
+            </button>
+
+            <button class="btn warn" onclick="adminReportAction(${r.id}, 'mute_10h')">
+              Mute 10h / trust -25
+            </button>
+
+            <button class="btn danger" onclick="adminReportAction(${r.id}, 'ban_1d')">
+              Ban 1d / trust -35
+            </button>
+          </div>
+        </div>
+      `;
+
+    } catch (e) {
+      detail.innerText = "Ошибка соединения с сервером.";
+    }
+  };
+
+  window.adminReportAction = async function (id, action) {
+    const ok = confirm("Применить действие к жалобе #" + id + "?");
+
+    if (!ok) return;
+
+    const detail = document.getElementById("adminReportDetail");
+
+    try {
+      const res = await fetch(SERVER_URL + "/admin/reports/" + id + "/action", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          adminNick: currentUser.nick,
+          action: action
+        })
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        appendAdminLog(data.error || "Ошибка действия.");
+        return;
+      }
+
+      appendAdminLog("Жалоба #" + id + ": " + data.message);
+
+      if (detail) {
+        detail.innerHTML = `
+          <div class="empty-state">
+            ✅ ${escapeHtml(data.message)}<br><br>
+            Жалоба обработана и убрана из активного списка.
+          </div>
+        `;
+      }
+
+      await loadAdminReports();
+
+    } catch (e) {
+      appendAdminLog("Ошибка соединения с сервером.");
+    }
+  };
+
+  const oldEnterPrivateRoomV22 = enterPrivateRoom;
+
+  window.enterPrivateRoom = enterPrivateRoom = async function (roomId, code) {
+    await oldEnterPrivateRoomV22(roomId, code);
+    compactPrivateTools();
+    closePrivateToolsBody();
+  };
+
+  const oldGoChatV22 = goChat;
+
+  window.goChat = goChat = function () {
+    oldGoChatV22();
+    compactPrivateTools();
+  };
+
+  const oldGoProfileV22 = goProfile;
+
+  window.goProfile = goProfile = function () {
+    oldGoProfileV22();
+
+    setTimeout(() => {
+      compactSabrinaPanel();
+      ensureAdminReportsPanelV22();
+    }, 100);
+  };
+
+  const oldLoadSabrinaProfileV22 = window.loadSabrinaProfile;
+
+  if (typeof oldLoadSabrinaProfileV22 === "function") {
+    window.loadSabrinaProfile = async function () {
+      await oldLoadSabrinaProfileV22();
+
+      setTimeout(() => {
+        compactSabrinaPanel();
+      }, 100);
+    };
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => {
+      compactPrivateTools();
+      compactSabrinaPanel();
+      ensureAdminReportsPanelV22();
+    }, 500);
+  });
+}
