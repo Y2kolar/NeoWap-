@@ -1581,3 +1581,284 @@ body::after{
   white-space:pre-wrap;
   overflow-wrap:anywhere;
 }
+
+/* === NeoWAP v32 home redesign === */
+
+.home-hero-card{
+  margin:12px 0;
+  padding:14px;
+  border:1px solid rgba(53,184,106,.16);
+  border-radius:20px;
+  background:
+    linear-gradient(135deg, rgba(8,22,14,.88), rgba(3,10,6,.96)),
+    radial-gradient(circle at 85% 30%, rgba(215,189,106,.08), transparent 28%);
+  box-shadow:
+    0 0 16px rgba(53,184,106,.025),
+    0 10px 30px rgba(0,0,0,.44);
+}
+
+.home-hero-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.home-hero-online{
+  color:var(--accent);
+  font-size:13px;
+  font-weight:800;
+  margin-bottom:8px;
+}
+
+.home-hero-text{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.45;
+}
+
+.home-hero-moon{
+  width:44px;
+  height:44px;
+  flex:0 0 44px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(215,189,106,.24);
+  border-radius:15px;
+  color:#d7bd6a;
+  background:rgba(35,28,8,.28);
+  font-size:28px;
+  box-shadow:0 0 18px rgba(215,189,106,.08);
+}
+
+.home-section-title{
+  margin:16px 2px 8px;
+  color:var(--accent);
+  font-size:15px;
+  font-weight:900;
+  letter-spacing:.04em;
+  text-shadow:0 0 8px rgba(53,184,106,.16);
+}
+
+/* room cards v32 */
+
+.room.room-v32{
+  display:grid !important;
+  grid-template-columns:58px 1fr auto !important;
+  grid-template-areas:"icon main online" !important;
+  align-items:center !important;
+  gap:13px !important;
+  min-height:92px !important;
+  padding:13px 14px !important;
+  cursor:pointer;
+}
+
+.room.room-v32::before{
+  display:none !important;
+  content:none !important;
+}
+
+.room-v32-icon{
+  grid-area:icon;
+  width:54px;
+  height:54px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(53,184,106,.18);
+  border-radius:16px;
+  background:
+    linear-gradient(180deg, rgba(53,184,106,.075), rgba(75,169,184,.035)),
+    rgba(2,8,5,.56);
+  box-shadow:
+    inset 0 0 16px rgba(0,0,0,.58),
+    0 0 12px rgba(53,184,106,.045);
+}
+
+.room-icon-moon .room-v32-icon::before{
+  content:"☾";
+  color:#d7bd6a;
+  font-size:29px;
+}
+
+.room-icon-yard .room-v32-icon::before{
+  content:"⌂";
+  color:#caa46d;
+  font-size:27px;
+}
+
+.room-icon-phone .room-v32-icon::before{
+  content:"▦";
+  color:#77b7c4;
+  font-size:26px;
+}
+
+.room-icon-heart .room-v32-icon::before{
+  content:"♡";
+  color:#c96c82;
+  font-size:28px;
+}
+
+.room-v32-main{
+  grid-area:main;
+  min-width:0;
+}
+
+.room-v32-head{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.room-v32-title{
+  min-width:0;
+  color:#d8eadc;
+  font-size:17px;
+  font-weight:900;
+  line-height:1.15;
+}
+
+.room-v32-arrow{
+  margin-left:auto;
+  color:rgba(166,216,181,.45);
+  font-size:28px;
+  line-height:1;
+}
+
+.room-v32-desc{
+  margin-top:5px;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.35;
+}
+
+.room-v32-hint{
+  margin-top:5px;
+  color:rgba(111,141,120,.68);
+  font-size:11px;
+  line-height:1.35;
+}
+
+.room-v32-online{
+  grid-area:online;
+  align-self:center;
+  justify-self:end;
+  padding:5px 8px;
+  border:1px solid rgba(53,184,106,.16);
+  border-radius:999px;
+  color:var(--accent);
+  background:rgba(53,184,106,.045);
+  font-size:11px;
+  font-weight:900;
+  white-space:nowrap;
+}
+
+/* Sabrina home card */
+
+.sabrina-home-card{
+  display:grid;
+  grid-template-columns:64px 1fr auto;
+  gap:12px;
+  align-items:center;
+  cursor:pointer;
+}
+
+.sabrina-home-avatar{
+  width:64px;
+  height:64px;
+  border:1px solid rgba(53,184,106,.22);
+  border-radius:18px;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(216,234,220,.13), transparent 19%),
+    radial-gradient(circle at 45% 32%, rgba(53,184,106,.22), transparent 4%),
+    radial-gradient(circle at 56% 32%, rgba(53,184,106,.22), transparent 4%),
+    linear-gradient(180deg, rgba(53,184,106,.12), rgba(2,8,5,.88));
+  box-shadow:
+    inset 0 0 18px rgba(0,0,0,.62),
+    0 0 16px rgba(53,184,106,.06);
+  position:relative;
+  overflow:hidden;
+}
+
+.sabrina-home-avatar::before{
+  content:"";
+  position:absolute;
+  left:18px;
+  right:18px;
+  top:17px;
+  height:30px;
+  border-radius:50% 50% 45% 45%;
+  background:
+    linear-gradient(180deg, rgba(216,234,220,.22), rgba(53,184,106,.055));
+  box-shadow:0 0 18px rgba(53,184,106,.08);
+}
+
+.sabrina-home-avatar::after{
+  content:"";
+  position:absolute;
+  left:14px;
+  right:14px;
+  top:11px;
+  height:42px;
+  border-radius:45% 45% 35% 35%;
+  border-top:10px solid rgba(2,8,5,.78);
+  border-left:8px solid rgba(2,8,5,.72);
+  border-right:8px solid rgba(2,8,5,.72);
+}
+
+.sabrina-home-main{
+  min-width:0;
+}
+
+.sabrina-home-title{
+  color:var(--accent);
+  font-size:18px;
+  font-weight:900;
+  line-height:1.2;
+}
+
+.sabrina-home-title span{
+  margin-left:8px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+.sabrina-home-text{
+  margin-top:6px;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.4;
+}
+
+.sabrina-home-dots{
+  color:rgba(166,216,181,.6);
+  font-size:20px;
+  letter-spacing:2px;
+}
+
+/* mobile tightening */
+
+@media (max-width:390px){
+  .room.room-v32{
+    grid-template-columns:52px 1fr !important;
+    grid-template-areas:
+      "icon main"
+      "icon online" !important;
+  }
+
+  .room-v32-icon{
+    width:50px;
+    height:50px;
+  }
+
+  .room-v32-online{
+    justify-self:start;
+    margin-top:4px;
+  }
+
+  .room-v32-hint{
+    display:none;
+  }
+}
