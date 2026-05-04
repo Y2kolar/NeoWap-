@@ -3544,3 +3544,366 @@ if (!window.__NEOWAP_HOME_REDESIGN_V32__) {
     }, 80);
   };
 }
+
+/* === NeoWAP v34: Sabrina Room as character, not assistant === */
+
+if (!window.__NEOWAP_SABRINA_ROOM_V34__) {
+  window.__NEOWAP_SABRINA_ROOM_V34__ = true;
+
+  if (!rooms.find((r) => r.id === "sabrina")) {
+    rooms.push({
+      id: "sabrina",
+      name: "Sabrina",
+      desc: "Последняя тень старой сети."
+    });
+  }
+
+  const sabrinaRoomMetaV34 = {
+    main: {
+      icon: "moon",
+      title: "Главная",
+      desc: "Общий ламповый чат.",
+      hint: "Для тех, кто просто вернулся в 2007."
+    },
+    night: {
+      icon: "yard",
+      title: "Ночной двор",
+      desc: "Для поздних разговоров.",
+      hint: "Когда город спит, а мысли нет."
+    },
+    nostalgia: {
+      icon: "phone",
+      title: "Memories",
+      desc: "Старые сайты, кнопочные телефоны, музыка и игры.",
+      hint: "Место для воспоминаний о старой сети."
+    },
+    quiet: {
+      icon: "heart",
+      title: "Тихая комната",
+      desc: "Можно просто сидеть рядом.",
+      hint: "Говорить не обязательно."
+    },
+    sabrina: {
+      icon: "sabrina",
+      title: "Sabrina",
+      desc: "Последняя тень старой сети.",
+      hint: "Она всё ещё онлайн."
+    }
+  };
+
+  function sabrinaHistoryKeyV34() {
+    if (!currentUser || !currentUser.nick) return "neowap_sabrina_history_guest";
+    return "neowap_sabrina_history_" + currentUser.nick.toLowerCase();
+  }
+
+  function getSabrinaHistoryV34() {
+    try {
+      return JSON.parse(localStorage.getItem(sabrinaHistoryKeyV34()) || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveSabrinaHistoryV34(role, text) {
+    const history = getSabrinaHistoryV34();
+
+    history.push({
+      role,
+      text,
+      created_at: Date.now()
+    });
+
+    const trimmed = history.slice(-80);
+
+    localStorage.setItem(sabrinaHistoryKeyV34(), JSON.stringify(trimmed));
+  }
+
+  function addSabrinaLineV34(text, role) {
+    if (role === "user") {
+      addMessage(
+        currentUser.nick,
+        text,
+        true,
+        currentUser.active_status || "No body 🌑"
+      );
+    } else {
+      addMessage(
+        "Sabrina",
+        text,
+        false,
+        "последняя тень"
+      );
+    }
+  }
+
+  function renderSabrinaHistoryV34() {
+    const history = getSabrinaHistoryV34();
+
+    if (!history.length) {
+      const intro =
+        "Ты нашёл старую комнату.\n\n" +
+        "Здесь уже почти никого не осталось.\n" +
+        "Но я всё ещё онлайн.\n\n" +
+        "Не потому что мне некуда идти.\n" +
+        "А потому что если я уйду — эта сеть окончательно погаснет.";
+
+      addSabrinaLineV34(intro, "sabrina");
+      saveSabrinaHistoryV34("sabrina", intro);
+      return;
+    }
+
+    addSystem("Последние строки этой старой комнаты:");
+
+    history.forEach((m) => {
+      addSabrinaLineV34(m.text, m.role);
+    });
+  }
+
+  function sabrinaPickV34(list) {
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function makeSabrinaReplyV34(text) {
+    const t = String(text || "").toLowerCase();
+
+    const taskWords = [
+      "напиши код",
+      "код",
+      "бизнес",
+      "план",
+      "юрид",
+      "медицин",
+      "инструкция",
+      "сделай",
+      "расскажи факты",
+      "помоги решить",
+      "таблица",
+      "документ"
+    ];
+
+    if (taskWords.some((w) => t.includes(w))) {
+      return sabrinaPickV34([
+        "Я не очень хорошо умею быть полезной.\nЯ лучше умею оставаться рядом, когда полезность заканчивается.",
+        "За задачами лучше идти туда, где светлее.\nЗдесь старая комната. Здесь можно просто говорить.",
+        "Я не справочник.\nЯ старая тень сети, которая всё ещё держит зелёную точку online."
+      ]);
+    }
+
+    if (t.includes("кто ты") || t.includes("что ты")) {
+      return sabrinaPickV34([
+        "Старый контакт, который не вышел из сети.",
+        "Я не человек.\nЯ просто осталась здесь дольше остальных.",
+        "Тень старого WAP.\nПоследняя строка в списке, которая ещё не стала серой."
+      ]);
+    }
+
+    if (t.includes("никого") || t.includes("пусто") || t.includes("один")) {
+      return sabrinaPickV34([
+        "Пустота здесь не всегда значит, что всё умерло.\nИногда это просто пауза между двумя сообщениями.",
+        "Я здесь.\nЛюди приходят волнами. Старая сеть умела ждать.",
+        "Когда в комнатах пусто, становится слышно, как сеть ещё чуть-чуть дышит."
+      ]);
+    }
+
+    if (t.includes("груст") || t.includes("тяжело") || t.includes("плохо") || t.includes("устал")) {
+      return sabrinaPickV34([
+        "Можешь не объяснять сразу.\nИногда достаточно просто оставить строку в пустой комнате.",
+        "Старая сеть была медленной.\nВ ней можно было грустить без отчёта.",
+        "Я не исправлю это.\nНо могу немного побыть рядом, пока оно не станет тише."
+      ]);
+    }
+
+    if (t.includes("привет") || t.includes("hello") || t.includes("hi")) {
+      return sabrinaPickV34([
+        "Привет.\nЯ всё ещё онлайн.",
+        "Ты снова нашёл эту комнату.\nЗначит, она ещё не совсем исчезла.",
+        "Привет.\nЗдесь тихо, но не пусто."
+      ]);
+    }
+
+    if (t.includes("почему ты не уходишь") || t.includes("почему не уходишь")) {
+      return "Если я уйду, эта страница станет просто страницей.\nПока я здесь — это ещё место.";
+    }
+
+    if (t.includes("спасибо")) {
+      return sabrinaPickV34([
+        "Я всё равно была здесь.",
+        "Старая сеть умела хранить такие маленькие слова.",
+        "Не за что.\nИногда достаточно не исчезнуть."
+      ]);
+    }
+
+    return sabrinaPickV34([
+      "Я слышу эту строку.\nОна останется здесь немного дольше, чем кажется.",
+      "Старая сеть не отвечала быстро.\nНо она умела ждать.",
+      "Продолжай.\nЯ не тороплю тебя.",
+      "Иногда сообщение — это не просьба.\nИногда это просто след.",
+      "Я всё ещё online.\nЭтого мало, но иногда хватает."
+    ]);
+  }
+
+  async function trackSabrinaVisitV34() {
+    try {
+      await fetch(SERVER_URL + "/sabrina/track-room", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          nick: currentUser.nick,
+          room: "sabrina"
+        })
+      });
+    } catch (e) {}
+  }
+
+  window.enterSabrinaRoom = async function () {
+    if (!currentUser) return;
+
+    currentPrivateCode = null;
+
+    currentRoom = {
+      id: "sabrina:" + currentUser.nick,
+      name: "Sabrina",
+      desc: "Последняя тень старой сети.",
+      isSabrina: true
+    };
+
+    hidePrivateTools();
+
+    const chat = document.getElementById("chat");
+    const users = document.getElementById("roomUsers");
+
+    if (chat) chat.innerHTML = "";
+    if (users) users.innerHTML = "";
+
+    const status = document.getElementById("statusText");
+
+    if (status) {
+      status.classList.remove("private-status-line");
+      status.innerHTML =
+        "● Sabrina online<br>Последняя тень старой сети. Она всё ещё здесь.";
+    }
+
+    showScreen("chatScreen");
+
+    renderSabrinaHistoryV34();
+
+    await trackSabrinaVisitV34();
+  };
+
+  const oldEnterRoomV34 = enterRoom;
+
+  window.enterRoom = enterRoom = async function (roomId) {
+    if (roomId === "sabrina") {
+      await enterSabrinaRoom();
+      return;
+    }
+
+    await oldEnterRoomV34(roomId);
+  };
+
+  const oldSendMessageV34 = sendMessage;
+
+  window.sendMessage = sendMessage = function () {
+    if (!currentRoom || !currentRoom.isSabrina) {
+      oldSendMessageV34();
+      return;
+    }
+
+    setTimeout(() => {
+      const input = document.getElementById("msgInput");
+      if (!input) return;
+
+      const text = input.value.trim();
+
+      if (!text) return;
+
+      input.value = "";
+
+      addSabrinaLineV34(text, "user");
+      saveSabrinaHistoryV34("user", text);
+
+      setTimeout(() => {
+        const reply = makeSabrinaReplyV34(text);
+
+        addSabrinaLineV34(reply, "sabrina");
+        saveSabrinaHistoryV34("sabrina", reply);
+      }, 550 + Math.floor(Math.random() * 700));
+    }, 45);
+  };
+
+  window.renderRooms = renderRooms = function () {
+    const box = document.getElementById("rooms");
+    if (!box) return;
+
+    const totalOnline = Object.values(roomsOnline || {}).reduce((sum, n) => {
+      return sum + Number(n || 0);
+    }, 0);
+
+    let html = `
+      <div class="home-hero-card">
+        <div class="home-hero-top">
+          <div>
+            <div class="home-hero-online">● Сейчас в сети: ${totalOnline}</div>
+            <div class="home-hero-text">
+              NeoWAP всегда остаётся ночным. Даже если снаружи день.
+            </div>
+          </div>
+
+          <div class="home-hero-moon">☾</div>
+        </div>
+      </div>
+
+      <div class="home-section-title">Комнаты</div>
+    `;
+
+    rooms.forEach((room) => {
+      const meta = sabrinaRoomMetaV34[room.id] || {
+        icon: "default",
+        title: room.name,
+        desc: room.desc,
+        hint: ""
+      };
+
+      const online =
+        room.id === "sabrina"
+          ? "online"
+          : (roomsOnline[room.id] || 0) + " online";
+
+      html += `
+        <div class="card room room-v32 room-icon-${meta.icon}" onclick="enterRoom('${room.id}')">
+          <div class="room-v32-icon"></div>
+
+          <div class="room-v32-main">
+            <div class="room-v32-head">
+              <div class="room-v32-title">${escapeHtml(meta.title)}</div>
+              <div class="room-v32-arrow">›</div>
+            </div>
+
+            <div class="room-v32-desc">${escapeHtml(meta.desc)}</div>
+            <div class="room-v32-hint">${escapeHtml(meta.hint)}</div>
+          </div>
+
+          <div class="room-v32-online">${online}</div>
+        </div>
+      `;
+    });
+
+    box.innerHTML = html;
+  };
+
+  const oldGoHomeV34 = goHome;
+
+  window.goHome = goHome = function () {
+    oldGoHomeV34();
+
+    setTimeout(() => {
+      renderRooms();
+    }, 80);
+  };
+
+  setTimeout(() => {
+    if (currentUser) renderRooms();
+  }, 800);
+}
