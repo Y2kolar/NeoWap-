@@ -135,6 +135,18 @@ function setupSockets(io) {
       }
     });
 
+const pendingApprovals = await privateRooms.getPendingInviteApprovalsForNick(nick);
+
+pendingApprovals.forEach((request) => {
+  socket.emit("privateInviteApprovalRequest", {
+    id: request.id,
+    code: request.code,
+    from_nick: request.from_nick,
+    to_nick: request.to_nick,
+    status: request.status
+  });
+});
+    
     socket.on("joinRoom", async (data) => {
       try {
         const room = String(data?.room || "").trim();
