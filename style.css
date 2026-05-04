@@ -2063,3 +2063,96 @@ body{
     opacity:.15;
   }
 }
+
+/* === NeoWAP v36: old network signal header === */
+
+.status.old-network-status{
+  padding:12px 13px;
+  border-color:rgba(215,189,106,.16);
+  background:
+    linear-gradient(135deg, rgba(35,28,8,.20), rgba(3,10,6,.94)),
+    radial-gradient(circle at 92% 35%, rgba(215,189,106,.07), transparent 28%);
+  box-shadow:
+    0 0 12px rgba(215,189,106,.035),
+    0 8px 22px rgba(0,0,0,.34);
+}
+
+.old-net-line{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  color:#d7bd6a;
+  font-size:13px;
+  font-weight:900;
+  letter-spacing:.02em;
+  white-space:nowrap;
+  overflow:hidden;
+}
+
+.old-net-dot{
+  width:8px;
+  height:8px;
+  flex:0 0 8px;
+  border-radius:50%;
+  background:#d7bd6a;
+  box-shadow:
+    0 0 6px rgba(215,189,106,.48),
+    0 0 14px rgba(215,189,106,.16);
+  animation:oldNetPulseV36 2.8s infinite;
+}
+
+.old-net-bars{
+  margin-left:auto;
+  display:flex;
+  align-items:flex-end;
+  gap:3px;
+  height:16px;
+  flex:0 0 auto;
+}
+
+.old-net-bars i{
+  display:block;
+  width:4px;
+  border-radius:2px;
+  background:rgba(215,189,106,.22);
+}
+
+.old-net-bars i:nth-child(1){
+  height:5px;
+  background:rgba(215,189,106,.78);
+}
+
+.old-net-bars i:nth-child(2){
+  height:8px;
+  background:rgba(215,189,106,.46);
+}
+
+.old-net-bars i:nth-child(3){
+  height:11px;
+  background:rgba(215,189,106,.18);
+}
+
+.old-net-bars i:nth-child(4){
+  height:14px;
+  background:rgba(215,189,106,.08);
+}
+
+.old-net-subline{
+  margin-top:5px;
+  color:rgba(111,141,120,.86);
+  font-size:12px;
+  line-height:1.35;
+}
+
+@keyframes oldNetPulseV36{
+  0%, 100%{
+    opacity:.42;
+    transform:scale(.9);
+  }
+
+  45%{
+    opacity:1;
+    transform:scale(1);
+  }
+}
