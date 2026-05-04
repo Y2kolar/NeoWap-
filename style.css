@@ -1941,3 +1941,64 @@ body{
     radial-gradient(circle at 50% 100%, rgba(53,184,106,.045), transparent 38%),
     linear-gradient(180deg,#010302 0%,#040b07 44%,#010302 100%);
 }
+
+/* === NeoWAP v34: Sabrina room card icon === */
+
+.room-icon-sabrina .room-v32-icon{
+  position:relative;
+  overflow:hidden;
+  border-color:rgba(53,184,106,.24);
+  background:
+    radial-gradient(circle at 50% 37%, rgba(210,235,215,.20) 0 12px, transparent 13px),
+    linear-gradient(180deg, rgba(18,42,27,.92), rgba(2,8,5,.95));
+}
+
+.room-icon-sabrina .room-v32-icon::before{
+  content:"";
+  position:absolute;
+  left:13px;
+  top:8px;
+  width:28px;
+  height:37px;
+  border-radius:50% 50% 42% 42%;
+  background:
+    radial-gradient(ellipse at 50% 24%, rgba(1,5,3,.96) 0 14px, transparent 15px),
+    linear-gradient(180deg, rgba(1,5,3,.88), rgba(1,5,3,.45));
+  box-shadow:
+    -6px 7px 0 rgba(1,5,3,.55),
+    6px 7px 0 rgba(1,5,3,.55);
+}
+
+.room-icon-sabrina .room-v32-icon::after{
+  content:"";
+  position:absolute;
+  left:20px;
+  top:19px;
+  width:14px;
+  height:19px;
+  border-radius:48% 48% 44% 44%;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(5,20,10,.95) 0 1px, transparent 2px),
+    radial-gradient(circle at 65% 35%, rgba(5,20,10,.95) 0 1px, transparent 2px),
+    linear-gradient(180deg, rgba(190,225,198,.65), rgba(95,145,105,.25));
+  box-shadow:
+    0 0 10px rgba(53,184,106,.10),
+    inset 0 -6px 10px rgba(0,0,0,.25);
+}
+
+.room-icon-sabrina{
+  border-color:rgba(53,184,106,.22);
+  background:
+    linear-gradient(145deg, rgba(8,22,14,.96), rgba(3,10,6,.98)),
+    radial-gradient(circle at 18% 50%, rgba(53,184,106,.06), transparent 28%);
+}
+
+.room-icon-sabrina .room-v32-title{
+  color:#48c978;
+}
+
+.room-icon-sabrina .room-v32-online{
+  color:#d7bd6a;
+  border-color:rgba(215,189,106,.18);
+  background:rgba(35,28,8,.20);
+}
