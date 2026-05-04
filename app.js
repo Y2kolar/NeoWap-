@@ -3220,3 +3220,181 @@ if (!window.__NEOWAP_APPROVE_THIRD_INVITE_V26__) {
 
   setTimeout(bindPrivateApprovalSocketEvents, 800);
 }
+
+/* === NeoWAP v31: mentions, reply by nick, highlighted addressed messages === */
+
+if (!window.__NEOWAP_MENTIONS_V31__) {
+  window.__NEOWAP_MENTIONS_V31__ = true;
+
+  function neoEscapeRegexV31(str) {
+    return String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function neoIsMentionedMeV31(text) {
+    if (!currentUser || !currentUser.nick) return false;
+
+    const nick = String(currentUser.nick).trim();
+
+    if (!nick) return false;
+
+    const cleanText = String(text || "");
+
+    const re = new RegExp(
+      "(^|[\\s\\n\\r.,!?;:()\\[\\]{}«»\"'`])@?" +
+        neoEscapeRegexV31(nick) +
+        "([\\s\\n\\r.,!?;:()\\[\\]{}«»\"'`]|$)",
+      "i"
+    );
+
+    return re.test(cleanText);
+  }
+
+  function neoInsertReplyToNickV31(nick) {
+    const input = document.getElementById("msgInput");
+
+    if (!input) return;
+
+    const cleanNick = String(nick || "").trim();
+
+    if (!cleanNick) return;
+
+    const mention = "@" + cleanNick + " ";
+    const value = input.value || "";
+
+    if (!value.trim()) {
+      input.value = mention;
+    } else if (!value.includes(mention)) {
+      input.value = mention + value;
+    }
+
+    input.focus();
+
+    try {
+      input.setSelectionRange(input.value.length, input.value.length);
+    } catch (e) {}
+
+    if (typeof sendTyping === "function") {
+      sendTyping();
+    }
+  }
+
+  function neoMakeNickButtonV31(nick) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "nick-click";
+    btn.innerText = nick;
+
+    btn.onclick = function (event) {
+      event.stopPropagation();
+      neoInsertReplyToNickV31(nick);
+    };
+
+    return btn;
+  }
+
+  function neoRenderRoomUsersV31(users) {
+    const box = document.getElementById("roomUsers");
+
+    if (!box) return;
+
+    if (!users || !users.length) {
+      box.innerHTML = "";
+      return;
+    }
+
+    box.innerHTML = "";
+
+    const label = document.createElement("span");
+    label.className = "room-users-label";
+    label.innerText = "Сейчас здесь: ";
+
+    box.appendChild(label);
+
+    users.forEach((nick, index) => {
+      const btn = neoMakeNickButtonV31(nick);
+      btn.classList.add("room-user-click");
+
+      box.appendChild(btn);
+
+      if (index < users.length - 1) {
+        const comma = document.createElement("span");
+        comma.className = "room-users-comma";
+        comma.innerText = ", ";
+        box.appendChild(comma);
+      }
+    });
+  }
+
+  function neoBindRoomUsersMentionsV31() {
+    if (!socket || socket.__neoMentionsBoundV31) return;
+
+    socket.__neoMentionsBoundV31 = true;
+
+    socket.on("roomUsers", (users) => {
+      neoRenderRoomUsersV31(users || []);
+    });
+  }
+
+  window.addMessage = addMessage = function (user, text, me, status) {
+    const chat = document.getElementById("chat");
+
+    if (!chat) return;
+
+    const div = document.createElement("div");
+
+    const mentionedMe = !me && neoIsMentionedMeV31(text);
+
+    div.className =
+      "msg" +
+      (me ? " me" : "") +
+      (mentionedMe ? " mentioned-me" : "");
+
+    div.dataset.userNick = user || "";
+
+    const nickLine = document.createElement("div");
+    nickLine.className = "nick";
+
+    const rank = document.createElement("span");
+    rank.className = "rank";
+    rank.innerText = status || "No body 🌑";
+
+    const nickButton = neoMakeNickButtonV31(user || "unknown");
+
+    nickLine.appendChild(rank);
+    nickLine.appendChild(nickButton);
+
+    const body = document.createElement("div");
+    body.className = "msg-text";
+    body.innerText = text || "";
+
+    div.appendChild(nickLine);
+    div.appendChild(body);
+
+    chat.appendChild(div);
+
+    if (mentionedMe) {
+      setTimeout(() => {
+        div.classList.add("mention-pulse");
+      }, 40);
+
+      setTimeout(() => {
+        div.classList.remove("mention-pulse");
+      }, 1400);
+    }
+
+    scrollChat();
+  };
+
+  const oldConnectSocketV31 = connectSocket;
+
+  window.connectSocket = connectSocket = function () {
+    oldConnectSocketV31();
+    neoBindRoomUsersMentionsV31();
+  };
+
+  setTimeout(() => {
+    neoBindRoomUsersMentionsV31();
+  }, 700);
+
+  window.replyToNick = neoInsertReplyToNickV31;
+}
