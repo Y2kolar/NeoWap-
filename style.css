@@ -1361,3 +1361,132 @@ body::after{
 .content::-webkit-scrollbar-thumb{
   background:rgba(53,184,106,.18);
 }
+
+/* === NeoWAP v30: fix room cards + restore bottom nav === */
+
+/* вернуть нижнее меню и поле ввода на место */
+.nav{
+  position:fixed !important;
+  left:50% !important;
+  bottom:0 !important;
+  transform:translateX(-50%) !important;
+  z-index:120 !important;
+  display:grid !important;
+  grid-template-columns:repeat(3, 1fr) !important;
+}
+
+.input-bar{
+  position:fixed !important;
+  left:50% !important;
+  bottom:var(--nav-h) !important;
+  transform:translateX(-50%) !important;
+  z-index:118 !important;
+}
+
+.typing{
+  position:fixed !important;
+  z-index:119 !important;
+}
+
+.invite-popup{
+  position:fixed !important;
+  z-index:140 !important;
+}
+
+.neo-notification-box{
+  position:fixed !important;
+  z-index:150 !important;
+}
+
+/* нормальное центрирование нижних кнопок */
+.nav-item{
+  height:100%;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:center !important;
+  justify-content:center !important;
+  text-align:center !important;
+  gap:5px !important;
+  padding:0 !important;
+  line-height:1.1 !important;
+}
+
+.nav-item br{
+  display:block !important;
+}
+
+/* карточки комнат: иконка отдельно, текст отдельно */
+.room{
+  display:grid !important;
+  grid-template-columns:64px 1fr !important;
+  grid-template-rows:auto auto !important;
+  grid-template-areas:
+    "icon name"
+    "icon desc" !important;
+  align-items:center !important;
+  column-gap:14px !important;
+  row-gap:4px !important;
+  min-height:104px !important;
+  padding:14px 16px !important;
+}
+
+.room::before{
+  grid-area:icon !important;
+  align-self:center !important;
+  justify-self:center !important;
+  flex:none !important;
+  width:54px !important;
+  height:54px !important;
+  margin:0 !important;
+}
+
+.room-name{
+  grid-area:name !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  gap:10px !important;
+  width:100% !important;
+  min-width:0 !important;
+}
+
+.room-name span:first-child{
+  display:block !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:normal !important;
+  line-height:1.15 !important;
+  font-size:18px !important;
+}
+
+.room-name span:first-child::before{
+  content:"" !important;
+}
+
+.room-desc{
+  grid-area:desc !important;
+  width:100% !important;
+  min-width:0 !important;
+  margin-top:0 !important;
+  font-size:13px !important;
+  line-height:1.35 !important;
+}
+
+.online{
+  flex:0 0 auto !important;
+  white-space:nowrap !important;
+  font-size:11px !important;
+}
+
+/* чуть компактнее приватный блок, чтобы не сжирал экран */
+#privateCreateBlock .input,
+#privateCreateBlock .btn{
+  margin-top:6px;
+  margin-bottom:6px;
+}
+
+/* убираем лишнее затемнение поверх навигации */
+.app::after{
+  pointer-events:none !important;
+}
