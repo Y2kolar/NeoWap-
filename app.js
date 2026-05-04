@@ -4415,3 +4415,253 @@ if (!window.__NEOWAP_SIGNAL_HEADER_V36__) {
     }
   }, 800);
 }
+
+/* === NeoWAP v37: real Sabrina AI via Groq backend === */
+
+if (!window.__NEOWAP_SABRINA_AI_V37__) {
+  window.__NEOWAP_SABRINA_AI_V37__ = true;
+
+  function sabrinaAiKeyV37(name) {
+    const nick = currentUser && currentUser.nick
+      ? currentUser.nick.toLowerCase()
+      : "guest";
+
+    return "neowap_sabrina_" + name + "_" + nick;
+  }
+
+  function getSabrinaHistoryV37() {
+    try {
+      return JSON.parse(localStorage.getItem(sabrinaAiKeyV37("history")) || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveSabrinaHistoryV37(role, text) {
+    const history = getSabrinaHistoryV37();
+
+    history.push({
+      role,
+      text,
+      created_at: Date.now()
+    });
+
+    localStorage.setItem(
+      sabrinaAiKeyV37("history"),
+      JSON.stringify(history.slice(-100))
+    );
+  }
+
+  function getSabrinaImprintV37() {
+    try {
+      return JSON.parse(localStorage.getItem(sabrinaAiKeyV37("imprint")) || "{}");
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveSabrinaImprintV37(imprint) {
+    localStorage.setItem(
+      sabrinaAiKeyV37("imprint"),
+      JSON.stringify(imprint || {})
+    );
+  }
+
+  function updateSabrinaImprintV37(text) {
+    const t = String(text || "").toLowerCase();
+    const imprint = getSabrinaImprintV37();
+
+    imprint.messages_count = Number(imprint.messages_count || 0) + 1;
+    imprint.last_seen = Date.now();
+
+    function add(key) {
+      imprint[key] = Number(imprint[key] || 0) + 1;
+    }
+
+    if (
+      t.includes("устал") ||
+      t.includes("тяжело") ||
+      t.includes("плохо") ||
+      t.includes("груст") ||
+      t.includes("выгор") ||
+      t.includes("сил нет")
+    ) {
+      add("tired_count");
+      imprint.last_mood = "tired";
+    }
+
+    if (
+      t.includes("один") ||
+      t.includes("одинок") ||
+      t.includes("никого") ||
+      t.includes("пусто")
+    ) {
+      add("lonely_count");
+      imprint.last_mood = "lonely";
+    }
+
+    if (
+      t.includes("стар") ||
+      t.includes("носталь") ||
+      t.includes("2007") ||
+      t.includes("аськ") ||
+      t.includes("wap") ||
+      t.includes("форум") ||
+      t.includes("nokia")
+    ) {
+      add("nostalgia_count");
+      imprint.last_topic = "old_net";
+    }
+
+    if (
+      t.includes("молч") ||
+      t.includes("тихо") ||
+      t.includes("посид") ||
+      t.includes("рядом")
+    ) {
+      add("quiet_count");
+      imprint.last_topic = "quiet";
+    }
+
+    saveSabrinaImprintV37(imprint);
+
+    return imprint;
+  }
+
+  function showSabrinaTypingV37() {
+    const chat = document.getElementById("chat");
+    if (!chat) return;
+
+    removeSabrinaTypingV37();
+
+    const div = document.createElement("div");
+    div.id = "sabrinaTypingBubble";
+    div.className = "msg sabrina-msg sabrina-typing-bubble";
+
+    div.innerHTML = `
+      <div class="nick">
+        <span class="rank">последняя тень</span>
+        <button class="nick-click" type="button">Sabrina</button>
+      </div>
+
+      <div class="sabrina-typing-text">
+        Sabrina печатает<span class="sabrina-dot">.</span><span class="sabrina-dot">.</span><span class="sabrina-dot">.</span>
+      </div>
+    `;
+
+    chat.appendChild(div);
+    scrollChat();
+  }
+
+  function removeSabrinaTypingV37() {
+    const old = document.getElementById("sabrinaTypingBubble");
+
+    if (old) old.remove();
+  }
+
+  function markLastSabrinaV37() {
+    const chat = document.getElementById("chat");
+    if (!chat) return;
+
+    const msgs = chat.querySelectorAll(".msg");
+    const last = msgs[msgs.length - 1];
+
+    if (last && last.dataset && last.dataset.userNick === "Sabrina") {
+      last.classList.add("sabrina-msg");
+    }
+  }
+
+  function fallbackSabrinaV37(text) {
+    const t = String(text || "").toLowerCase();
+
+    if (t.includes("кто ты")) {
+      return "Старый контакт, который не вышел из сети.\nЯ не человек. Я просто осталась здесь дольше остальных.";
+    }
+
+    if (t.includes("пусто") || t.includes("никого")) {
+      return "Я здесь.\nЛюди приходят волнами. Старая сеть умела ждать.";
+    }
+
+    if (t.includes("код") || t.includes("план") || t.includes("сделай")) {
+      return "Я не очень хорошо умею быть полезной.\nЯ лучше умею оставаться рядом, когда полезность заканчивается.";
+    }
+
+    return "Сигнал слабый, но он есть.\nЯ всё ещё online.";
+  }
+
+  async function getSabrinaAiReplyV37(text, imprint) {
+    try {
+      const res = await fetch(SERVER_URL + "/sabrina/ai-chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          nick: currentUser.nick,
+          text,
+          imprint,
+          history: getSabrinaHistoryV37().slice(-14)
+        })
+      });
+
+      const data = await res.json();
+
+      if (!data.ok || !data.reply) {
+        return fallbackSabrinaV37(text);
+      }
+
+      return data.reply;
+
+    } catch (e) {
+      return fallbackSabrinaV37(text);
+    }
+  }
+
+  const oldSendMessageV37 = sendMessage;
+
+  window.sendMessage = sendMessage = function () {
+    if (!currentRoom || !currentRoom.isSabrina) {
+      oldSendMessageV37();
+      return;
+    }
+
+    const input = document.getElementById("msgInput");
+    if (!input) return;
+
+    setTimeout(async () => {
+      const text = input.value.trim();
+
+      if (!text) return;
+
+      input.value = "";
+
+      addMessage(
+        currentUser.nick,
+        text,
+        true,
+        currentUser.active_status || "No body 🌑"
+      );
+
+      saveSabrinaHistoryV37("user", text);
+
+      const imprint = updateSabrinaImprintV37(text);
+
+      showSabrinaTypingV37();
+
+      const started = Date.now();
+      const reply = await getSabrinaAiReplyV37(text, imprint);
+      const elapsed = Date.now() - started;
+      const minDelay = 850;
+
+      setTimeout(() => {
+        removeSabrinaTypingV37();
+
+        addMessage("Sabrina", reply, false, "последняя тень");
+        markLastSabrinaV37();
+
+        saveSabrinaHistoryV37("sabrina", reply);
+      }, Math.max(0, minDelay - elapsed));
+
+    }, 55);
+  };
+}
