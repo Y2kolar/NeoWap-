@@ -1862,3 +1862,82 @@ body::after{
     display:none;
   }
 }
+
+/* === NeoWAP v33: Sabrina visible avatar + fixed night mood === */
+
+/* Sabrina avatar — тёмный портрет вместо пустого пятна */
+.sabrina-home-avatar{
+  position:relative;
+  width:64px;
+  height:64px;
+  border-radius:18px;
+  overflow:hidden;
+  border:1px solid rgba(53,184,106,.22);
+  background:
+    radial-gradient(circle at 50% 37%, rgba(210,235,215,.28) 0 13px, transparent 14px),
+    radial-gradient(circle at 43% 35%, rgba(20,40,25,.9) 0 2px, transparent 3px),
+    radial-gradient(circle at 57% 35%, rgba(20,40,25,.9) 0 2px, transparent 3px),
+    radial-gradient(ellipse at 50% 58%, rgba(70,216,123,.18) 0 22px, transparent 23px),
+    linear-gradient(180deg, rgba(18,42,27,.95), rgba(2,8,5,.95));
+  box-shadow:
+    inset 0 0 18px rgba(0,0,0,.75),
+    0 0 16px rgba(53,184,106,.08);
+}
+
+/* волосы / тень лица */
+.sabrina-home-avatar::before{
+  content:"";
+  position:absolute;
+  left:13px;
+  top:9px;
+  width:38px;
+  height:48px;
+  border-radius:50% 50% 42% 42%;
+  background:
+    radial-gradient(ellipse at 50% 24%, rgba(1,5,3,.95) 0 19px, transparent 20px),
+    linear-gradient(180deg, rgba(1,5,3,.9), rgba(1,5,3,.55));
+  box-shadow:
+    -8px 8px 0 rgba(1,5,3,.62),
+    8px 8px 0 rgba(1,5,3,.62);
+  opacity:.92;
+}
+
+/* лицо поверх волос */
+.sabrina-home-avatar::after{
+  content:"";
+  position:absolute;
+  left:22px;
+  top:20px;
+  width:20px;
+  height:26px;
+  border-radius:48% 48% 44% 44%;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(5,20,10,.95) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 65% 35%, rgba(5,20,10,.95) 0 1.5px, transparent 2px),
+    linear-gradient(180deg, rgba(190,225,198,.72), rgba(95,145,105,.28));
+  box-shadow:
+    0 0 10px rgba(53,184,106,.14),
+    inset 0 -8px 12px rgba(0,0,0,.25);
+}
+
+/* чтобы карточка Sabrina выглядела как отдельный персонаж */
+.sabrina-home-card{
+  border-color:rgba(53,184,106,.18);
+  background:
+    linear-gradient(145deg, rgba(8,22,14,.94), rgba(3,10,6,.97)),
+    radial-gradient(circle at 18% 50%, rgba(53,184,106,.07), transparent 28%);
+}
+
+.sabrina-home-title{
+  color:#44c978;
+  text-shadow:0 0 7px rgba(53,184,106,.18);
+}
+
+/* фиксируем ночную атмосферу — без дневного режима */
+body{
+  background:
+    radial-gradient(circle at 20% 0%, rgba(0,110,120,.06), transparent 30%),
+    radial-gradient(circle at 100% 10%, rgba(90,40,100,.05), transparent 34%),
+    radial-gradient(circle at 50% 100%, rgba(53,184,106,.045), transparent 38%),
+    linear-gradient(180deg,#010302 0%,#040b07 44%,#010302 100%);
+}
