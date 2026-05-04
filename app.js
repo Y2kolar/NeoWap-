@@ -3084,3 +3084,139 @@ if (!window.__NEOWAP_PRIVATE_TOP_AUTOHIDE_V25__) {
     await oldEnterRoomV25(roomId);
   };
 }
+
+/* === NeoWAP v26: approve third person private invite === */
+
+if (!window.__NEOWAP_APPROVE_THIRD_INVITE_V26__) {
+  window.__NEOWAP_APPROVE_THIRD_INVITE_V26__ = true;
+
+  const pendingInviteApprovals = {};
+
+  function addPendingInviteApproval(request) {
+    if (!request || !request.id) return;
+
+    pendingInviteApprovals[request.id] = request;
+
+    showInviteApprovalPopup(request);
+    appendPrivateLog(
+      `${request.from_nick} хочет пригласить ${request.to_nick} в комнату ${request.code}. Нужно твоё согласие.`
+    );
+  }
+
+  function removePendingInviteApproval(id) {
+    delete pendingInviteApprovals[id];
+
+    const popup = document.getElementById("invitePopup");
+
+    if (popup) {
+      popup.classList.remove("active");
+      popup.innerHTML = "";
+    }
+  }
+
+  function showInviteApprovalPopup(request) {
+    const popup = document.getElementById("invitePopup");
+
+    if (!popup) return;
+
+    popup.innerHTML = `
+      <div class="card invite-card">
+        <div class="title">Согласование приглашения</div>
+
+        <div class="subtitle">
+          ${escapeHtml(request.from_nick)} хочет пригласить
+          <b>${escapeHtml(request.to_nick)}</b>
+          в приватную комнату <b>${escapeHtml(request.code)}</b>.
+        </div>
+
+        <div class="invite-warning">
+          Sabrina: новый участник появится в комнате только если ты согласишься.
+        </div>
+
+        <button class="btn secondary" onclick="approvePrivateInviteRequest(${request.id})">
+          Согласен
+        </button>
+
+        <button class="btn danger" onclick="declinePrivateInviteRequest(${request.id})">
+          Не согласен
+        </button>
+      </div>
+    `;
+
+    popup.classList.add("active");
+  }
+
+  window.approvePrivateInviteRequest = function (id) {
+    if (!socket || !socket.connected) {
+      connectSocket();
+      appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
+      return;
+    }
+
+    socket.emit("approvePrivateInviteRequest", {
+      requestId: id,
+      user: currentUser.nick
+    });
+
+    removePendingInviteApproval(id);
+  };
+
+  window.declinePrivateInviteRequest = function (id) {
+    if (!socket || !socket.connected) {
+      connectSocket();
+      appendPrivateLog("Сервер подключается. Повтори действие через секунду.");
+      return;
+    }
+
+    socket.emit("declinePrivateInviteRequest", {
+      requestId: id,
+      user: currentUser.nick
+    });
+
+    removePendingInviteApproval(id);
+  };
+
+  function bindPrivateApprovalSocketEvents() {
+    if (!socket || socket.__neoApprovalEventsBound) return;
+
+    socket.__neoApprovalEventsBound = true;
+
+    socket.on("privateInviteApprovalRequest", (request) => {
+      addPendingInviteApproval(request);
+    });
+
+    socket.on("privateInviteApprovalStarted", (data) => {
+      appendPrivateLog(
+        `Запрос согласования отправлен участникам комнаты ${data.code}.`
+      );
+
+      appendPrivateRoomLog(
+        `Запрос согласования отправлен участникам комнаты. Приглашаем: ${data.to_nick}.`
+      );
+    });
+
+    socket.on("privateInviteApprovalResult", (data) => {
+      appendPrivateLog(data.text || "Решение по приглашению принято.");
+      appendPrivateRoomLog(data.text || "Решение по приглашению принято.");
+    });
+
+    socket.on("privateInviteApproved", (data) => {
+      appendPrivateLog(data.text || "Приглашение одобрено.");
+      appendPrivateRoomLog(data.text || "Приглашение одобрено.");
+    });
+
+    socket.on("privateInviteDeclinedByMember", (data) => {
+      appendPrivateLog(data.text || "Участник отклонил приглашение.");
+      appendPrivateRoomLog(data.text || "Участник отклонил приглашение.");
+    });
+  }
+
+  const oldConnectSocketV26 = connectSocket;
+
+  window.connectSocket = connectSocket = function () {
+    oldConnectSocketV26();
+    bindPrivateApprovalSocketEvents();
+  };
+
+  setTimeout(bindPrivateApprovalSocketEvents, 800);
+}
