@@ -4333,3 +4333,85 @@ if (!window.__NEOWAP_SABRINA_POLISH_V35__) {
     }, 55);
   };
 }
+
+/* === NeoWAP v36: old network signal header === */
+
+if (!window.__NEOWAP_SIGNAL_HEADER_V36__) {
+  window.__NEOWAP_SIGNAL_HEADER_V36__ = true;
+
+  function setOldNetworkSignalHeaderV36() {
+    const status = document.getElementById("statusText");
+
+    if (!status) return;
+
+    status.classList.add("old-network-status");
+
+    status.innerHTML = `
+      <div class="old-net-line">
+        <span class="old-net-dot"></span>
+        <span>Сигнал старой сети: слабый</span>
+        <span class="old-net-bars">
+          <i></i><i></i><i></i><i></i>
+        </span>
+      </div>
+
+      <div class="old-net-subline">
+        Последняя волна ещё держится.
+      </div>
+    `;
+  }
+
+  function clearOldNetworkSignalHeaderV36() {
+    const status = document.getElementById("statusText");
+
+    if (!status) return;
+
+    status.classList.remove("old-network-status");
+  }
+
+  const oldGoHomeV36Signal = goHome;
+
+  window.goHome = goHome = function () {
+    oldGoHomeV36Signal();
+
+    setTimeout(() => {
+      setOldNetworkSignalHeaderV36();
+    }, 80);
+  };
+
+  const oldAfterLoginV36Signal = afterLogin;
+
+  window.afterLogin = afterLogin = async function () {
+    await oldAfterLoginV36Signal();
+
+    setTimeout(() => {
+      setOldNetworkSignalHeaderV36();
+    }, 120);
+  };
+
+  const oldEnterRoomV36Signal = enterRoom;
+
+  window.enterRoom = enterRoom = async function (roomId) {
+    clearOldNetworkSignalHeaderV36();
+
+    await oldEnterRoomV36Signal(roomId);
+  };
+
+  const oldEnterSabrinaRoomV36Signal = window.enterSabrinaRoom;
+
+  if (typeof oldEnterSabrinaRoomV36Signal === "function") {
+    window.enterSabrinaRoom = async function () {
+      clearOldNetworkSignalHeaderV36();
+
+      await oldEnterSabrinaRoomV36Signal();
+    };
+  }
+
+  setTimeout(() => {
+    const roomsScreen = document.getElementById("roomsScreen");
+
+    if (roomsScreen && roomsScreen.classList.contains("active")) {
+      setOldNetworkSignalHeaderV36();
+    }
+  }, 800);
+}
