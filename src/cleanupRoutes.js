@@ -4,7 +4,9 @@ function setupCleanupRoutes(app) {
   app.get("/admin/cleanup-test-data", async (req, res) => {
     const secret = String(req.query.secret || "").trim();
 
-    if (!process.env.CLEAN_SECRET || secret !== process.env.CLEAN_SECRET) {
+    // Временный секрет прямо в коде.
+    // После очистки этот файл лучше удалить.
+    if (secret !== "12345") {
       return res.status(403).json({
         ok: false,
         error: "Нет доступа"
@@ -40,7 +42,8 @@ function setupCleanupRoutes(app) {
 
       res.status(500).json({
         ok: false,
-        error: "Ошибка очистки"
+        error: "Ошибка очистки",
+        details: String(e.message || e)
       });
 
     } finally {
