@@ -1490,3 +1490,94 @@ body::after{
 .app::after{
   pointer-events:none !important;
 }
+
+/* === NeoWAP v31 mentions + reply by nick === */
+
+.nick-click{
+  border:none;
+  outline:none;
+  padding:0;
+  margin:0;
+  background:transparent;
+  color:var(--accent);
+  font:inherit;
+  font-weight:800;
+  cursor:pointer;
+  text-align:left;
+}
+
+.nick-click:active{
+  color:var(--soft);
+  text-shadow:0 0 8px rgba(53,184,106,.32);
+}
+
+.msg.me .nick-click{
+  text-align:right;
+}
+
+.room-users-label{
+  color:var(--muted);
+}
+
+.room-user-click{
+  display:inline;
+  border:none;
+  outline:none;
+  padding:2px 4px;
+  margin:0 1px;
+  border-radius:7px;
+  background:rgba(53,184,106,.07);
+  color:var(--accent);
+  font:inherit;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.room-user-click:active{
+  background:rgba(53,184,106,.16);
+}
+
+.room-users-comma{
+  color:var(--muted);
+}
+
+.msg.mentioned-me{
+  border-color:rgba(255,211,110,.38) !important;
+  background:
+    linear-gradient(145deg, rgba(44,34,8,.74), rgba(5,13,8,.95)) !important;
+  box-shadow:
+    0 0 0 1px rgba(255,211,110,.12),
+    0 0 22px rgba(255,211,110,.09),
+    0 8px 20px rgba(0,0,0,.34) !important;
+}
+
+.msg.mentioned-me .nick-click{
+  color:#e0c36f;
+}
+
+.msg.mention-pulse{
+  animation:neoMentionPulseV31 1.2s ease-out;
+}
+
+@keyframes neoMentionPulseV31{
+  0%{
+    transform:scale(1);
+    box-shadow:
+      0 0 0 1px rgba(255,211,110,.28),
+      0 0 26px rgba(255,211,110,.22),
+      0 8px 20px rgba(0,0,0,.34);
+  }
+
+  50%{
+    transform:scale(1.012);
+  }
+
+  100%{
+    transform:scale(1);
+  }
+}
+
+.msg-text{
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
