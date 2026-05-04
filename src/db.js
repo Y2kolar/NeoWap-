@@ -66,6 +66,34 @@ async function initDb() {
   `);
 
   await pool.query(`
+  CREATE TABLE IF NOT EXISTS private_invite_requests (
+    id SERIAL PRIMARY KEY,
+    code TEXT NOT NULL,
+    from_nick TEXT NOT NULL,
+    to_nick TEXT NOT NULL,
+    status TEXT DEFAULT 'pending_approval',
+    approvals_required INTEGER DEFAULT 0,
+    approvals_count INTEGER DEFAULT 0,
+    approved_by TEXT DEFAULT '',
+    declined_by TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    resolved_at TIMESTAMP
+  );
+`);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS private_invite_request_votes (
+    id SERIAL PRIMARY KEY,
+    request_id INTEGER NOT NULL,
+    approver_nick TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT NOW(),
+    responded_at TIMESTAMP,
+    UNIQUE(request_id, approver_nick)
+  );
+`);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS private_room_members (
       id SERIAL PRIMARY KEY,
       code TEXT NOT NULL,
