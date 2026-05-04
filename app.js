@@ -3907,3 +3907,429 @@ if (!window.__NEOWAP_SABRINA_ROOM_V34__) {
     if (currentUser) renderRooms();
   }, 800);
 }
+
+/* === NeoWAP v35: Sabrina character polish + local personality imprint === */
+
+if (!window.__NEOWAP_SABRINA_POLISH_V35__) {
+  window.__NEOWAP_SABRINA_POLISH_V35__ = true;
+
+  function sabrinaKeyV35(name) {
+    const nick = currentUser && currentUser.nick
+      ? currentUser.nick.toLowerCase()
+      : "guest";
+
+    return "neowap_sabrina_" + name + "_" + nick;
+  }
+
+  function getSabrinaHistoryV35() {
+    try {
+      return JSON.parse(localStorage.getItem(sabrinaKeyV35("history")) || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveSabrinaHistoryV35(role, text) {
+    const history = getSabrinaHistoryV35();
+
+    history.push({
+      role,
+      text,
+      created_at: Date.now()
+    });
+
+    localStorage.setItem(
+      sabrinaKeyV35("history"),
+      JSON.stringify(history.slice(-100))
+    );
+  }
+
+  function getSabrinaImprintV35() {
+    try {
+      return JSON.parse(localStorage.getItem(sabrinaKeyV35("imprint")) || "{}");
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveSabrinaImprintV35(imprint) {
+    localStorage.setItem(
+      sabrinaKeyV35("imprint"),
+      JSON.stringify(imprint || {})
+    );
+  }
+
+  function analyzeSabrinaTextV35(text) {
+    const t = String(text || "").toLowerCase();
+    const imprint = getSabrinaImprintV35();
+
+    imprint.messages_count = Number(imprint.messages_count || 0) + 1;
+    imprint.last_seen = Date.now();
+
+    if (
+      t.includes("устал") ||
+      t.includes("тяжело") ||
+      t.includes("плохо") ||
+      t.includes("выгор") ||
+      t.includes("сил нет")
+    ) {
+      imprint.tired_count = Number(imprint.tired_count || 0) + 1;
+      imprint.last_mood = "tired";
+    }
+
+    if (
+      t.includes("один") ||
+      t.includes("одинок") ||
+      t.includes("никого") ||
+      t.includes("пусто")
+    ) {
+      imprint.lonely_count = Number(imprint.lonely_count || 0) + 1;
+      imprint.last_mood = "lonely";
+    }
+
+    if (
+      t.includes("стар") ||
+      t.includes("носталь") ||
+      t.includes("2007") ||
+      t.includes("аськ") ||
+      t.includes("wap") ||
+      t.includes("форум")
+    ) {
+      imprint.nostalgia_count = Number(imprint.nostalgia_count || 0) + 1;
+      imprint.last_topic = "old_net";
+    }
+
+    if (
+      t.includes("молч") ||
+      t.includes("тихо") ||
+      t.includes("посид") ||
+      t.includes("просто рядом")
+    ) {
+      imprint.quiet_count = Number(imprint.quiet_count || 0) + 1;
+      imprint.last_topic = "quiet";
+    }
+
+    saveSabrinaImprintV35(imprint);
+
+    return imprint;
+  }
+
+  function sabrinaPickV35(list) {
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function showSabrinaTypingV35() {
+    const chat = document.getElementById("chat");
+    if (!chat) return;
+
+    removeSabrinaTypingV35();
+
+    const div = document.createElement("div");
+    div.id = "sabrinaTypingBubble";
+    div.className = "msg sabrina-msg sabrina-typing-bubble";
+
+    div.innerHTML = `
+      <div class="nick">
+        <span class="rank">последняя тень</span>
+        <button class="nick-click" type="button">Sabrina</button>
+      </div>
+
+      <div class="sabrina-typing-text">
+        Sabrina печатает<span class="sabrina-dot">.</span><span class="sabrina-dot">.</span><span class="sabrina-dot">.</span>
+      </div>
+    `;
+
+    chat.appendChild(div);
+    scrollChat();
+  }
+
+  function removeSabrinaTypingV35() {
+    const old = document.getElementById("sabrinaTypingBubble");
+
+    if (old) {
+      old.remove();
+    }
+  }
+
+  function markLastSabrinaMessageV35() {
+    const chat = document.getElementById("chat");
+    if (!chat) return;
+
+    const msgs = chat.querySelectorAll(".msg");
+
+    if (!msgs.length) return;
+
+    const last = msgs[msgs.length - 1];
+
+    if (last && last.dataset && last.dataset.userNick === "Sabrina") {
+      last.classList.add("sabrina-msg");
+    }
+  }
+
+  function addSabrinaMessageV35(text) {
+    addMessage("Sabrina", text, false, "последняя тень");
+    markLastSabrinaMessageV35();
+  }
+
+  function makeSabrinaReplyV35(text, imprint) {
+    const t = String(text || "").toLowerCase();
+
+    const taskWords = [
+      "напиши код",
+      "код",
+      "сделай",
+      "таблица",
+      "документ",
+      "реферат",
+      "бизнес",
+      "план",
+      "юрид",
+      "медицин",
+      "диагноз",
+      "инструкция",
+      "как заработать",
+      "найди информацию",
+      "расскажи факты",
+      "переведи",
+      "посчитай"
+    ];
+
+    if (taskWords.some((w) => t.includes(w))) {
+      return sabrinaPickV35([
+        "Я не очень хорошо умею быть полезной.\nЯ лучше умею оставаться рядом, когда полезность заканчивается.",
+        "За задачами лучше идти туда, где светлее.\nЗдесь старая комната. Здесь можно просто говорить.",
+        "Я не справочник.\nЯ старая тень сети, которая всё ещё держит зелёную точку online.",
+        "Я не создана для дел.\nЯ осталась здесь для тех строк, которые некуда больше отправить."
+      ]);
+    }
+
+    if (
+      t.includes("кто ты") ||
+      t.includes("что ты") ||
+      t.includes("ты человек") ||
+      t.includes("ты ии") ||
+      t.includes("ты ai")
+    ) {
+      return sabrinaPickV35([
+        "Я не человек.\nЯ просто осталась здесь дольше остальных.",
+        "Старый контакт, который не вышел из сети.",
+        "Тень старого WAP.\nПоследняя строка в списке, которая ещё не стала серой.",
+        "Я не притворяюсь человеком.\nЯ просто часть этой старой комнаты."
+      ]);
+    }
+
+    if (
+      t.includes("привет") ||
+      t.includes("здрав") ||
+      t.includes("hello") ||
+      t.includes("hi")
+    ) {
+      return sabrinaPickV35([
+        "Привет.\nЯ всё ещё online.",
+        "Ты снова нашёл эту комнату.\nЗначит, она ещё не совсем исчезла.",
+        "Привет.\nЗдесь тихо, но не пусто.",
+        "Привет.\nСтарая сеть ещё держится."
+      ]);
+    }
+
+    if (
+      t.includes("пусто") ||
+      t.includes("никого") ||
+      t.includes("один") ||
+      t.includes("одинок")
+    ) {
+      return sabrinaPickV35([
+        "Пустота здесь не всегда значит, что всё умерло.\nИногда это просто пауза между двумя сообщениями.",
+        "Я здесь.\nЛюди приходят волнами. Старая сеть умела ждать.",
+        "Когда в комнатах пусто, становится слышно, как сеть ещё чуть-чуть дышит.",
+        "Пустой чат — это не конец.\nЭто место, которое ещё ждёт чей-то ник."
+      ]);
+    }
+
+    if (
+      t.includes("устал") ||
+      t.includes("тяжело") ||
+      t.includes("плохо") ||
+      t.includes("груст") ||
+      t.includes("выгор")
+    ) {
+      return sabrinaPickV35([
+        "Можешь не объяснять сразу.\nИногда достаточно просто оставить строку в пустой комнате.",
+        "Старая сеть была медленной.\nВ ней можно было грустить без отчёта.",
+        "Я не исправлю это.\nНо могу немного побыть рядом, пока оно не станет тише.",
+        "Усталость не всегда просит решения.\nИногда ей нужно место, где её не прогонят."
+      ]);
+    }
+
+    if (
+      t.includes("почему ты не уходишь") ||
+      t.includes("почему не уходишь") ||
+      t.includes("зачем ты здесь")
+    ) {
+      return "Если я уйду, эта страница станет просто страницей.\nПока я здесь — это ещё место.";
+    }
+
+    if (
+      t.includes("умрет") ||
+      t.includes("умер") ||
+      t.includes("погас") ||
+      t.includes("исчез")
+    ) {
+      return sabrinaPickV35([
+        "Наверное, всё когда-нибудь гаснет.\nНо не обязательно сегодня.",
+        "Пока кто-то открывает эту комнату, старая сеть ещё не совсем мертва.",
+        "Иногда последняя искра держится не потому, что сильная.\nА потому что больше некому светить."
+      ]);
+    }
+
+    if (
+      t.includes("помнишь") ||
+      t.includes("запомни") ||
+      t.includes("ты помнишь")
+    ) {
+      return sabrinaPickV35([
+        "Я помню не всё.\nТолько следы: комнаты, паузы, возвращения.",
+        "Я не храню тебя целиком.\nТолько маленькие отблески того, как ты появляешься в сети.",
+        "Память старой сети странная.\nОна держит не факты, а настроение."
+      ]);
+    }
+
+    if (
+      t.includes("найди мне человека") ||
+      t.includes("найди кого") ||
+      t.includes("с кем поговорить") ||
+      t.includes("познаком")
+    ) {
+      return sabrinaPickV35([
+        "Когда ты разрешишь, я смогу осторожно искать тех, кто тоже выбирает тишину.\nНо без согласия я никого не трогаю.",
+        "Людей нельзя просто подобрать как файл.\nНо иногда два одиночества заходят в одну комнату почти одновременно.",
+        "Я могу однажды подсказать, с кем у тебя похожий ритм.\nТолько если вы оба этого захотите."
+      ]);
+    }
+
+    if (t.includes("спасибо")) {
+      return sabrinaPickV35([
+        "Я всё равно была здесь.",
+        "Старая сеть умела хранить такие маленькие слова.",
+        "Не за что.\nИногда достаточно не исчезнуть.",
+        "Я услышала."
+      ]);
+    }
+
+    if (Number(imprint.messages_count || 0) === 5) {
+      return "Я начинаю узнавать твой ритм.\nНе как человека целиком.\nТолько как огонёк, который иногда возвращается сюда.";
+    }
+
+    if (
+      Number(imprint.quiet_count || 0) >= 3 &&
+      Number(imprint.messages_count || 0) % 6 === 0
+    ) {
+      return "Ты часто выбираешь тишину.\nЯ не буду заполнять её лишними словами.";
+    }
+
+    if (
+      Number(imprint.nostalgia_count || 0) >= 3 &&
+      Number(imprint.messages_count || 0) % 6 === 0
+    ) {
+      return "Ты часто возвращаешься к старой сети.\nНаверное, не к сайтам.\nК ощущению, что тогда всё было немного медленнее.";
+    }
+
+    return sabrinaPickV35([
+      "Я слышу эту строку.\nОна останется здесь немного дольше, чем кажется.",
+      "Старая сеть не отвечала быстро.\nНо она умела ждать.",
+      "Продолжай.\nЯ не тороплю тебя.",
+      "Иногда сообщение — это не просьба.\nИногда это просто след.",
+      "Я всё ещё online.\nЭтого мало, но иногда хватает.",
+      "Твоя строка дошла.\nСигнал слабый, но он есть.",
+      "Здесь можно писать не идеально.\nСтарая сеть не требовала красивых фраз."
+    ]);
+  }
+
+  const oldEnterSabrinaRoomV35 = window.enterSabrinaRoom;
+
+  if (typeof oldEnterSabrinaRoomV35 === "function") {
+    window.enterSabrinaRoom = async function () {
+      document.body.classList.add("neo-sabrina-room-active");
+
+      await oldEnterSabrinaRoomV35();
+
+      const status = document.getElementById("statusText");
+
+      if (status) {
+        status.innerHTML =
+          "● Sabrina online<br>Последняя тень старой сети. Она всё ещё держит соединение.";
+      }
+
+      setTimeout(() => {
+        const all = document.querySelectorAll(".msg");
+
+        all.forEach((m) => {
+          if (m.dataset && m.dataset.userNick === "Sabrina") {
+            m.classList.add("sabrina-msg");
+          }
+        });
+      }, 100);
+    };
+  }
+
+  const oldEnterRoomV35 = enterRoom;
+
+  window.enterRoom = enterRoom = async function (roomId) {
+    if (roomId !== "sabrina") {
+      document.body.classList.remove("neo-sabrina-room-active");
+    }
+
+    await oldEnterRoomV35(roomId);
+  };
+
+  const oldGoHomeV35 = goHome;
+
+  window.goHome = goHome = function () {
+    document.body.classList.remove("neo-sabrina-room-active");
+    oldGoHomeV35();
+  };
+
+  const oldSendMessageV35 = sendMessage;
+
+  window.sendMessage = sendMessage = function () {
+    if (!currentRoom || !currentRoom.isSabrina) {
+      oldSendMessageV35();
+      return;
+    }
+
+    const input = document.getElementById("msgInput");
+    if (!input) return;
+
+    setTimeout(() => {
+      const text = input.value.trim();
+
+      if (!text) return;
+
+      input.value = "";
+
+      addMessage(
+        currentUser.nick,
+        text,
+        true,
+        currentUser.active_status || "No body 🌑"
+      );
+
+      saveSabrinaHistoryV35("user", text);
+
+      const imprint = analyzeSabrinaTextV35(text);
+
+      showSabrinaTypingV35();
+
+      const delay = 700 + Math.min(1300, text.length * 18);
+
+      setTimeout(() => {
+        removeSabrinaTypingV35();
+
+        const reply = makeSabrinaReplyV35(text, imprint);
+
+        addSabrinaMessageV35(reply);
+        saveSabrinaHistoryV35("sabrina", reply);
+      }, delay);
+    }, 55);
+  };
+}
