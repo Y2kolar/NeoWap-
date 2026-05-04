@@ -2176,3 +2176,39 @@ body{
 .sabrina-match-text b{
   color:#d7bd6a;
 }
+
+/* === NeoWAP v40: real Sabrina avatar === */
+
+.sabrina-home-avatar{
+  background-image:url("./assets/sabrina.png") !important;
+  background-size:cover !important;
+  background-position:center !important;
+  background-repeat:no-repeat !important;
+  border:1px solid rgba(53,184,106,.32) !important;
+  box-shadow:
+    inset 0 0 24px rgba(0,0,0,.38),
+    0 0 18px rgba(53,184,106,.12) !important;
+}
+
+.sabrina-home-avatar::before,
+.sabrina-home-avatar::after{
+  display:none !important;
+  content:none !important;
+}
+
+.room-icon-sabrina .room-v32-icon{
+  background-image:url("./assets/sabrina.png") !important;
+  background-size:cover !important;
+  background-position:center !important;
+  background-repeat:no-repeat !important;
+  border-color:rgba(53,184,106,.28) !important;
+  box-shadow:
+    inset 0 0 18px rgba(0,0,0,.45),
+    0 0 14px rgba(53,184,106,.10) !important;
+}
+
+.room-icon-sabrina .room-v32-icon::before,
+.room-icon-sabrina .room-v32-icon::after{
+  display:none !important;
+  content:none !important;
+}
