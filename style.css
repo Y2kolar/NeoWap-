@@ -2002,3 +2002,64 @@ body{
   border-color:rgba(215,189,106,.18);
   background:rgba(35,28,8,.20);
 }
+
+/* === NeoWAP v35: Sabrina character polish === */
+
+.neo-sabrina-room-active .status{
+  border-color:rgba(215,189,106,.16);
+  background:
+    linear-gradient(135deg, rgba(35,28,8,.18), rgba(3,10,6,.94)),
+    radial-gradient(circle at 92% 35%, rgba(215,189,106,.07), transparent 28%);
+}
+
+.msg.sabrina-msg{
+  border-color:rgba(53,184,106,.18);
+  background:
+    linear-gradient(145deg, rgba(8,22,14,.94), rgba(3,10,6,.96)),
+    radial-gradient(circle at 10% 20%, rgba(53,184,106,.055), transparent 28%);
+}
+
+.msg.sabrina-msg .nick-click{
+  color:#48c978;
+}
+
+.msg.sabrina-msg .rank{
+  color:#9ab7a2;
+  border-color:rgba(53,184,106,.14);
+}
+
+.sabrina-typing-bubble{
+  opacity:.88;
+}
+
+.sabrina-typing-text{
+  color:var(--muted);
+  font-size:13px;
+  letter-spacing:.02em;
+}
+
+.sabrina-dot{
+  animation:sabrinaDotV35 1.2s infinite;
+}
+
+.sabrina-dot:nth-child(2){
+  animation-delay:.18s;
+}
+
+.sabrina-dot:nth-child(3){
+  animation-delay:.36s;
+}
+
+@keyframes sabrinaDotV35{
+  0%, 20%{
+    opacity:.15;
+  }
+
+  50%{
+    opacity:1;
+  }
+
+  100%{
+    opacity:.15;
+  }
+}
