@@ -6,6 +6,7 @@ const { initDb } = require("./src/db");
 const sockets = require("./src/sockets");
 const routes = require("./src/routes");
 const sabrinaRoutes = require("./src/sabrinaRoutes");
+const sabrinaAi = require("./src/sabrinaAi");
 
 const app = express();
 
@@ -28,6 +29,7 @@ routes.setupRoutes(app, {
 });
 
 sabrinaRoutes.setupSabrinaRoutes(app);
+sabrinaAi.setupSabrinaAiRoutes(app);
 
 const server = http.createServer(app);
 
