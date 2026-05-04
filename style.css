@@ -2156,3 +2156,23 @@ body{
     transform:scale(1);
   }
 }
+
+/* === NeoWAP v39: Sabrina match card === */
+
+.sabrina-match-card{
+  border-color:rgba(215,189,106,.22) !important;
+  background:
+    linear-gradient(145deg, rgba(35,28,8,.42), rgba(3,10,6,.96)),
+    radial-gradient(circle at 12% 20%, rgba(215,189,106,.055), transparent 28%) !important;
+}
+
+.sabrina-match-text{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.45;
+  margin:8px 0 10px;
+}
+
+.sabrina-match-text b{
+  color:#d7bd6a;
+}
