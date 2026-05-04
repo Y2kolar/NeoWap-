@@ -1185,3 +1185,179 @@ body::after{
 .msg{
   border-color:rgba(70,216,123,.13);
 }
+
+/* === NeoWAP v29: deeper night dim layer === */
+
+:root{
+  --bg:#020403;
+  --bg2:#040b07;
+  --panel:#06100a;
+  --panel2:#07140d;
+  --card:#07120c;
+  --card2:#0a1910;
+
+  --text:#d8eadc;
+  --muted:#6f8d78;
+  --soft:#a6d8b5;
+
+  --accent:#35b86a;
+  --accent2:#4ba9b8;
+  --accent3:#b94da8;
+
+  --border:rgba(53,184,106,.14);
+  --border2:rgba(75,169,184,.11);
+
+  --shadow:0 0 12px rgba(53,184,106,.025);
+}
+
+/* общий затемняющий слой */
+.app::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:3;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(53,184,106,.035), transparent 34%),
+    linear-gradient(180deg, rgba(0,0,0,.12), rgba(0,0,0,.22));
+  mix-blend-mode:multiply;
+}
+
+/* чтобы контент был выше затемняющего слоя */
+.header,
+.status,
+.content,
+.input-bar,
+.nav,
+.typing,
+.invite-popup,
+.neo-notification-box{
+  position:relative;
+  z-index:4;
+}
+
+/* меньше свечения логотипа */
+.logo{
+  color:#47c978;
+  text-shadow:
+    0 0 5px rgba(53,184,106,.42),
+    0 0 12px rgba(53,184,106,.12);
+}
+
+.logo::after{
+  opacity:.22;
+}
+
+/* приглушить сетку и scanlines */
+body::before{
+  opacity:.085;
+}
+
+body::after{
+  opacity:.03;
+}
+
+/* карточки темнее */
+.card{
+  background:
+    linear-gradient(145deg, rgba(8,20,13,.91), rgba(3,10,6,.96)),
+    radial-gradient(circle at 20% 0%, rgba(53,184,106,.035), transparent 36%);
+  border-color:rgba(53,184,106,.13);
+  box-shadow:
+    0 0 12px rgba(53,184,106,.025),
+    0 10px 30px rgba(0,0,0,.52);
+}
+
+.status{
+  background:
+    linear-gradient(135deg, rgba(53,184,106,.04), rgba(75,169,184,.025)),
+    rgba(4,11,7,.88);
+  border-color:rgba(53,184,106,.13);
+  box-shadow:0 0 12px rgba(53,184,106,.025);
+}
+
+/* кнопки менее кислотные */
+.btn{
+  background:
+    linear-gradient(135deg, #39c873, #8edca7);
+  box-shadow:
+    0 0 10px rgba(53,184,106,.11),
+    0 8px 20px rgba(0,0,0,.38);
+}
+
+.btn.secondary{
+  color:#addfbc;
+  background:
+    linear-gradient(135deg, rgba(53,184,106,.075), rgba(75,169,184,.045));
+  border-color:rgba(53,184,106,.16);
+  box-shadow:none;
+}
+
+/* сообщения мягче */
+.msg{
+  background:
+    linear-gradient(145deg, rgba(7,22,13,.92), rgba(3,10,6,.95));
+  border-color:rgba(53,184,106,.105);
+  color:#dcefe1;
+  box-shadow:0 8px 20px rgba(0,0,0,.34);
+}
+
+.msg.me{
+  border-color:rgba(75,169,184,.12);
+  background:
+    linear-gradient(145deg, rgba(20,85,90,.07), rgba(5,15,17,.93));
+}
+
+.msg.system{
+  color:#d7bd6a;
+  border-color:rgba(215,189,106,.18);
+  background:rgba(22,17,5,.42);
+}
+
+/* ник и статус менее яркие */
+.nick{
+  color:#4bd27f;
+}
+
+.rank{
+  color:#789985;
+  border-color:rgba(53,184,106,.14);
+}
+
+/* нижнее меню приглушить */
+.nav{
+  background:rgba(2,7,4,.97);
+  border-top-color:rgba(53,184,106,.12);
+}
+
+.nav-item{
+  color:#789985;
+}
+
+.nav-item:active{
+  color:#47c978;
+  background:rgba(53,184,106,.045);
+}
+
+/* поле ввода темнее */
+.input{
+  background:rgba(1,5,3,.82);
+  border-color:rgba(53,184,106,.13);
+  color:#dcefe1;
+}
+
+.input:focus{
+  border-color:rgba(53,184,106,.34);
+  box-shadow:
+    0 0 0 2px rgba(53,184,106,.045),
+    inset 0 0 18px rgba(0,0,0,.48);
+}
+
+.input::placeholder{
+  color:rgba(111,141,120,.55);
+}
+
+/* полоска скролла мягче */
+.content::-webkit-scrollbar-thumb{
+  background:rgba(53,184,106,.18);
+}
