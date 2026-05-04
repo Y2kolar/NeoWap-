@@ -3398,3 +3398,149 @@ if (!window.__NEOWAP_MENTIONS_V31__) {
 
   window.replyToNick = neoInsertReplyToNickV31;
 }
+
+/* === NeoWAP v32: redesigned home room cards + Sabrina assistant card === */
+
+if (!window.__NEOWAP_HOME_REDESIGN_V32__) {
+  window.__NEOWAP_HOME_REDESIGN_V32__ = true;
+
+  const neoRoomMetaV32 = {
+    main: {
+      icon: "moon",
+      title: "Главная",
+      desc: "Общий ламповый чат.",
+      hint: "Для тех, кто просто вернулся в 2007."
+    },
+    night: {
+      icon: "yard",
+      title: "Ночной двор",
+      desc: "Для поздних разговоров.",
+      hint: "Когда город спит, а мысли нет."
+    },
+    nostalgia: {
+      icon: "phone",
+      title: "2007 memories",
+      desc: "Аська, Nokia, старые сайты.",
+      hint: "Вспомнить старую сеть без спешки."
+    },
+    quiet: {
+      icon: "heart",
+      title: "Тихая комната",
+      desc: "Для тех, кто просто хочет посидеть.",
+      hint: "Можно молчать. Это тоже общение."
+    }
+  };
+
+  function getTotalOnlineV32() {
+    try {
+      return Object.values(roomsOnline || {}).reduce((sum, n) => {
+        return sum + Number(n || 0);
+      }, 0);
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  window.openSabrinaFromHome = function () {
+    if (!currentUser) return;
+
+    goProfile();
+
+    setTimeout(() => {
+      const panel = document.getElementById("sabrinaPanel");
+
+      if (panel) {
+        panel.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      }
+    }, 250);
+  };
+
+  window.renderRooms = renderRooms = function () {
+    const box = document.getElementById("rooms");
+    if (!box) return;
+
+    const totalOnline = getTotalOnlineV32();
+
+    let html = `
+      <div class="home-hero-card">
+        <div class="home-hero-top">
+          <div>
+            <div class="home-hero-online">● Сейчас в сети: ${totalOnline}</div>
+            <div class="home-hero-text">
+              Поздняя ночь. Самое время для честных разговоров.
+            </div>
+          </div>
+
+          <div class="home-hero-moon">☾</div>
+        </div>
+      </div>
+
+      <div class="home-section-title">Комнаты</div>
+    `;
+
+    rooms.forEach((room) => {
+      const meta = neoRoomMetaV32[room.id] || {
+        icon: "default",
+        title: room.name,
+        desc: room.desc,
+        hint: ""
+      };
+
+      const online = roomsOnline[room.id] || 0;
+
+      html += `
+        <div class="card room room-v32 room-icon-${meta.icon}" onclick="enterRoom('${room.id}')">
+          <div class="room-v32-icon"></div>
+
+          <div class="room-v32-main">
+            <div class="room-v32-head">
+              <div class="room-v32-title">${escapeHtml(meta.title)}</div>
+              <div class="room-v32-arrow">›</div>
+            </div>
+
+            <div class="room-v32-desc">${escapeHtml(meta.desc)}</div>
+            <div class="room-v32-hint">${escapeHtml(meta.hint)}</div>
+          </div>
+
+          <div class="room-v32-online">${online} online</div>
+        </div>
+      `;
+    });
+
+    html += `
+      <div class="home-section-title">Ночной помощник</div>
+
+      <div class="card sabrina-home-card" onclick="openSabrinaFromHome()">
+        <div class="sabrina-home-avatar"></div>
+
+        <div class="sabrina-home-main">
+          <div class="sabrina-home-title">
+            Sabrina
+            <span>онлайн</span>
+          </div>
+
+          <div class="sabrina-home-text">
+            Иногда проще говорить с незнакомцем. Хочешь попробовать?
+          </div>
+        </div>
+
+        <div class="sabrina-home-dots">•••</div>
+      </div>
+    `;
+
+    box.innerHTML = html;
+  };
+
+  const oldGoHomeV32 = goHome;
+
+  window.goHome = goHome = function () {
+    oldGoHomeV32();
+
+    setTimeout(() => {
+      renderRooms();
+    }, 80);
+  };
+}
