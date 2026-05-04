@@ -12,7 +12,7 @@ const app = express();
 
 app.use(express.json({ limit: "1mb" }));
 
-/* CORS + OPTIONS fix */
+/* CORS + OPTIONS */
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
@@ -25,7 +25,7 @@ app.use((req, res, next) => {
   next();
 });
 
-/* health check */
+/* Health check */
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
@@ -34,7 +34,7 @@ app.get("/health", (req, res) => {
   });
 });
 
-/* main API routes */
+/* Main API routes */
 routes.setupRoutes(app, {
   getRoomsOnline: sockets.getRoomsOnline
 });
@@ -43,7 +43,7 @@ routes.setupRoutes(app, {
 sabrinaRoutes.setupSabrinaRoutes(app);
 sabrinaAi.setupSabrinaAiRoutes(app);
 
-/* static files */
+/* Static files */
 app.use(express.static(__dirname));
 
 const server = http.createServer(app);
