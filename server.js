@@ -7,7 +7,6 @@ const sockets = require("./src/sockets");
 const routes = require("./src/routes");
 const sabrinaRoutes = require("./src/sabrinaRoutes");
 const sabrinaAi = require("./src/sabrinaAi");
-const cleanupRoutes = require("./src/cleanupRoutes");
 
 const app = express();
 
@@ -43,7 +42,6 @@ routes.setupRoutes(app, {
 /* Sabrina routes */
 sabrinaRoutes.setupSabrinaRoutes(app);
 sabrinaAi.setupSabrinaAiRoutes(app);
-cleanupRoutes.setupCleanupRoutes(app);
 
 /* static files */
 app.use(express.static(__dirname));
