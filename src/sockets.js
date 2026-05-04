@@ -130,23 +130,25 @@ function setupSockets(io) {
         await touchUser(nick);
 
         socket.emit("system", "NeoWAP: пользователь зарегистрирован в сети.");
+
+        const pendingApprovals =
+          await privateRooms.getPendingInviteApprovalsForNick(nick);
+
+        pendingApprovals.forEach((request) => {
+          socket.emit("privateInviteApprovalRequest", {
+            id: request.id,
+            code: request.code,
+            from_nick: request.from_nick,
+            to_nick: request.to_nick,
+            status: request.status
+          });
+        });
+
       } catch (e) {
         console.error("REGISTER USER ERROR:", e);
       }
     });
 
-const pendingApprovals = await privateRooms.getPendingInviteApprovalsForNick(nick);
-
-pendingApprovals.forEach((request) => {
-  socket.emit("privateInviteApprovalRequest", {
-    id: request.id,
-    code: request.code,
-    from_nick: request.from_nick,
-    to_nick: request.to_nick,
-    status: request.status
-  });
-});
-    
     socket.on("joinRoom", async (data) => {
       try {
         const room = String(data?.room || "").trim();
@@ -333,6 +335,51 @@ pendingApprovals.forEach((request) => {
           return;
         }
 
+        const members = await privateRooms.getPrivateMembers(code);
+
+        const approvers = members
+          .map((m) => m.nick)
+          .filter((nick) => nick.toLowerCase() !== fromNick.toLowerCase())
+          .filter((nick) => nick.toLowerCase() !== toNick.toLowerCase());
+
+        if (requestedCode && approvers.length > 0) {
+          const createdRequest = await privateRooms.createPrivateInviteRequest(
+            code,
+            fromNick,
+            toNick,
+            approvers
+          );
+
+          const request = createdRequest.request;
+
+          socket.emit("privateInviteApprovalStarted", {
+            id: request.id,
+            code,
+            from_nick: fromNick,
+            to_nick: toNick,
+            approvers
+          });
+
+          createdRequest.approvers.forEach((approver) => {
+            emitToNick(io, approver, "privateInviteApprovalRequest", {
+              id: request.id,
+              code,
+              from_nick: fromNick,
+              to_nick: toNick,
+              status: "pending_approval"
+            });
+
+            emitToNick(
+              io,
+              approver,
+              "system",
+              `🔐 ${fromNick} хочет пригласить ${toNick} в приватную комнату ${code}. Нужно твоё согласие.`
+            );
+          });
+
+          return;
+        }
+
         const invite = await pool.query(
           `INSERT INTO private_invites (code, from_nick, to_nick, warning_level)
            VALUES ($1, $2, $3, $4)
@@ -450,6 +497,143 @@ pendingApprovals.forEach((request) => {
 
       } catch (e) {
         console.error("DECLINE PRIVATE INVITE ERROR:", e);
+      }
+    });
+
+    socket.on("approvePrivateInviteRequest", async (data) => {
+      try {
+        const requestId = Number(data?.requestId);
+        const approver = String(data?.user || "").trim();
+
+        if (!requestId || !approver) return;
+
+        const result = await privateRooms.votePrivateInviteRequest(
+          requestId,
+          approver,
+          "approved"
+        );
+
+        if (!result.ok) {
+          socket.emit("privateInviteError", result.error || "Запрос не найден.");
+          return;
+        }
+
+        const request = result.request;
+
+        socket.emit("privateInviteApprovalResult", {
+          id: request.id,
+          code: request.code,
+          status: result.status,
+          text: "Ты подтвердил приглашение."
+        });
+
+        emitToNick(
+          io,
+          request.from_nick,
+          "privateInviteApprovalResult",
+          {
+            id: request.id,
+            code: request.code,
+            status: result.status,
+            text: `${approver} согласился пригласить ${request.to_nick} в комнату ${request.code}.`
+          }
+        );
+
+        if (!result.final || result.status !== "approved") {
+          return;
+        }
+
+        const inviter = await getUserByNick(request.from_nick);
+        const warningLevel = getPrivateWarningLevel(inviter?.trust_score || 35);
+
+        const invite = await pool.query(
+          `INSERT INTO private_invites (code, from_nick, to_nick, warning_level)
+           VALUES ($1, $2, $3, $4)
+           RETURNING *`,
+          [
+            request.code,
+            request.from_nick,
+            request.to_nick,
+            warningLevel
+          ]
+        );
+
+        const payload = {
+          ...invite.rows[0],
+          from_status: inviter ? getActiveStatus(inviter) : "NeoWAP",
+          from_trust_level: inviter ? getTrustLevel(inviter.trust_score || 35) : "новый"
+        };
+
+        emitToNick(io, request.to_nick, "privateInvite", payload);
+
+        emitToNick(
+          io,
+          request.from_nick,
+          "privateInviteApproved",
+          {
+            id: request.id,
+            code: request.code,
+            to_nick: request.to_nick,
+            text: `Все участники согласились. Приглашение отправлено пользователю ${request.to_nick}.`
+          }
+        );
+
+        socket.emit("privateInviteApproved", {
+          id: request.id,
+          code: request.code,
+          to_nick: request.to_nick,
+          text: `Все участники согласились. Приглашение отправлено пользователю ${request.to_nick}.`
+        });
+
+      } catch (e) {
+        console.error("APPROVE PRIVATE INVITE REQUEST ERROR:", e);
+        socket.emit("privateInviteError", "Ошибка подтверждения приглашения.");
+      }
+    });
+
+    socket.on("declinePrivateInviteRequest", async (data) => {
+      try {
+        const requestId = Number(data?.requestId);
+        const approver = String(data?.user || "").trim();
+
+        if (!requestId || !approver) return;
+
+        const result = await privateRooms.votePrivateInviteRequest(
+          requestId,
+          approver,
+          "declined"
+        );
+
+        if (!result.ok) {
+          socket.emit("privateInviteError", result.error || "Запрос не найден.");
+          return;
+        }
+
+        const request = result.request;
+
+        socket.emit("privateInviteApprovalResult", {
+          id: request.id,
+          code: request.code,
+          status: "declined",
+          text: "Ты отклонил приглашение."
+        });
+
+        emitToNick(
+          io,
+          request.from_nick,
+          "privateInviteDeclinedByMember",
+          {
+            id: request.id,
+            code: request.code,
+            declined_by: approver,
+            to_nick: request.to_nick,
+            text: `${approver} не согласился приглашать ${request.to_nick} в комнату ${request.code}.`
+          }
+        );
+
+      } catch (e) {
+        console.error("DECLINE PRIVATE INVITE REQUEST ERROR:", e);
+        socket.emit("privateInviteError", "Ошибка отклонения приглашения.");
       }
     });
 
