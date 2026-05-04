@@ -4665,3 +4665,231 @@ if (!window.__NEOWAP_SABRINA_AI_V37__) {
     }, 55);
   };
 }
+
+/* === NeoWAP v39: Sabrina suggests people to chat === */
+
+if (!window.__NEOWAP_SABRINA_MATCH_SUGGEST_V39__) {
+  window.__NEOWAP_SABRINA_MATCH_SUGGEST_V39__ = true;
+
+  function sabrinaMatchKeyV39(name) {
+    const nick = currentUser && currentUser.nick
+      ? currentUser.nick.toLowerCase()
+      : "guest";
+
+    return "neowap_sabrina_match_" + name + "_" + nick;
+  }
+
+  function getSabrinaImprintV39() {
+    try {
+      const nick = currentUser && currentUser.nick
+        ? currentUser.nick.toLowerCase()
+        : "guest";
+
+      return JSON.parse(localStorage.getItem("neowap_sabrina_imprint_" + nick) || "{}");
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function getDismissedMatchesV39() {
+    try {
+      return JSON.parse(localStorage.getItem(sabrinaMatchKeyV39("dismissed")) || "{}");
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveDismissedMatchV39(nick) {
+    const dismissed = getDismissedMatchesV39();
+
+    dismissed[String(nick || "").toLowerCase()] = Date.now();
+
+    localStorage.setItem(
+      sabrinaMatchKeyV39("dismissed"),
+      JSON.stringify(dismissed)
+    );
+  }
+
+  function wasRecentlyDismissedV39(nick) {
+    const dismissed = getDismissedMatchesV39();
+    const time = dismissed[String(nick || "").toLowerCase()];
+
+    if (!time) return false;
+
+    return Date.now() - Number(time) < 24 * 60 * 60 * 1000;
+  }
+
+  function canShowMatchNowV39() {
+    const last = Number(localStorage.getItem(sabrinaMatchKeyV39("last_shown")) || 0);
+
+    return Date.now() - last > 8 * 60 * 1000;
+  }
+
+  function markMatchShownV39() {
+    localStorage.setItem(sabrinaMatchKeyV39("last_shown"), String(Date.now()));
+  }
+
+  function appendSabrinaMatchCardV39(match) {
+    const chat = document.getElementById("chat");
+
+    if (!chat || !match || !match.nick) return;
+
+    const existing = document.getElementById("sabrinaMatchCardV39");
+
+    if (existing) existing.remove();
+
+    const card = document.createElement("div");
+    card.id = "sabrinaMatchCardV39";
+    card.className = "msg sabrina-msg sabrina-match-card";
+
+    card.innerHTML = `
+      <div class="nick">
+        <span class="rank">последняя тень</span>
+        <button class="nick-click" type="button">Sabrina</button>
+      </div>
+
+      <div class="sabrina-match-text">
+        Я заметила слабое совпадение сигнала.<br><br>
+        <b>${escapeHtml(match.nick)}</b> — ${escapeHtml(match.reason || "похожий ритм общения")}.<br><br>
+        Хочешь, я предложу вам списаться?
+      </div>
+
+      <button class="btn secondary" onclick="sabrinaInviteMatchV39('${escapeHtml(match.nick)}')">
+        Предложить списаться
+      </button>
+
+      <button class="btn secondary" onclick="sabrinaDismissMatchV39('${escapeHtml(match.nick)}')">
+        Не сейчас
+      </button>
+    `;
+
+    chat.appendChild(card);
+    scrollChat();
+
+    markMatchShownV39();
+  }
+
+  async function maybeShowSabrinaMatchV39() {
+    if (!currentUser || !currentRoom || !currentRoom.isSabrina) return;
+
+    const imprint = getSabrinaImprintV39();
+
+    if (Number(imprint.messages_count || 0) < 3) return;
+    if (!canShowMatchNowV39()) return;
+
+    try {
+      const res = await fetch(
+        SERVER_URL + "/sabrina/ai-matches/" + encodeURIComponent(currentUser.nick)
+      );
+
+      const data = await res.json();
+
+      if (!data.ok || !Array.isArray(data.matches) || !data.matches.length) {
+        return;
+      }
+
+      const match = data.matches.find((m) => !wasRecentlyDismissedV39(m.nick));
+
+      if (!match) return;
+
+      appendSabrinaMatchCardV39(match);
+
+    } catch (e) {}
+  }
+
+  window.sabrinaInviteMatchV39 = function (nick) {
+    const cleanNick = String(nick || "").trim();
+
+    if (!cleanNick || !currentUser) return;
+
+    if (!socket || !socket.connected) {
+      connectSocket();
+    }
+
+    if (!socket || !socket.connected) {
+      const card = document.getElementById("sabrinaMatchCardV39");
+
+      if (card) {
+        card.innerHTML += `
+          <div class="rules-small">
+            Сигнал слабый. Попробуй ещё раз через секунду.
+          </div>
+        `;
+      }
+
+      return;
+    }
+
+    socket.emit("createPrivateInvite", {
+      from: currentUser.nick,
+      to: cleanNick,
+      code: ""
+    });
+
+    const card = document.getElementById("sabrinaMatchCardV39");
+
+    if (card) {
+      card.innerHTML = `
+        <div class="nick">
+          <span class="rank">последняя тень</span>
+          <button class="nick-click" type="button">Sabrina</button>
+        </div>
+
+        <div class="sabrina-match-text">
+          Я отправила слабый сигнал пользователю <b>${escapeHtml(cleanNick)}</b>.<br><br>
+          Если он ответит — комната откроется сама.
+        </div>
+      `;
+    }
+
+    saveDismissedMatchV39(cleanNick);
+  };
+
+  window.sabrinaDismissMatchV39 = function (nick) {
+    saveDismissedMatchV39(nick);
+
+    const card = document.getElementById("sabrinaMatchCardV39");
+
+    if (card) {
+      card.remove();
+    }
+  };
+
+  const observerV39 = new MutationObserver(() => {
+    if (!currentRoom || !currentRoom.isSabrina) return;
+
+    setTimeout(() => {
+      maybeShowSabrinaMatchV39();
+    }, 1600);
+  });
+
+  function bindSabrinaMatchObserverV39() {
+    const chat = document.getElementById("chat");
+
+    if (!chat || chat.__sabrinaMatchObserverV39) return;
+
+    chat.__sabrinaMatchObserverV39 = true;
+
+    observerV39.observe(chat, {
+      childList: true
+    });
+  }
+
+  const oldEnterSabrinaRoomV39 = window.enterSabrinaRoom;
+
+  if (typeof oldEnterSabrinaRoomV39 === "function") {
+    window.enterSabrinaRoom = async function () {
+      await oldEnterSabrinaRoomV39();
+
+      bindSabrinaMatchObserverV39();
+
+      setTimeout(() => {
+        maybeShowSabrinaMatchV39();
+      }, 2500);
+    };
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(bindSabrinaMatchObserverV39, 800);
+  });
+}
