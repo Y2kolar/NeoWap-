@@ -1008,3 +1008,180 @@ body::after{
     transform:translateX(-50%);
   }
 }
+
+/* === NeoWAP v28: softer night theme + room icons + nick alignment === */
+
+:root{
+  --accent:#46d87b;
+  --soft:#b8edc8;
+  --muted:#7fa08a;
+  --border:rgba(70,216,123,.18);
+  --shadow:0 0 18px rgba(70,216,123,.045);
+}
+
+body::before{
+  opacity:.13;
+}
+
+body::after{
+  opacity:.045;
+}
+
+.logo{
+  color:var(--accent);
+  text-shadow:
+    0 0 7px rgba(70,216,123,.55),
+    0 0 18px rgba(70,216,123,.18);
+}
+
+.logo::after{
+  opacity:.38;
+}
+
+.card{
+  box-shadow:
+    0 0 18px rgba(70,216,123,.035),
+    0 10px 30px rgba(0,0,0,.42);
+}
+
+.btn{
+  box-shadow:
+    0 0 12px rgba(70,216,123,.16),
+    0 8px 20px rgba(0,0,0,.34);
+}
+
+.btn.secondary{
+  box-shadow:0 0 10px rgba(70,216,123,.045);
+}
+
+/* нижнее меню по центру */
+
+.nav{
+  align-items:center;
+}
+
+.nav-item{
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  gap:4px;
+  padding-top:2px;
+  font-size:12px;
+}
+
+.nav-item br{
+  display:none;
+}
+
+/* делаем иконку и текст вертикально ровнее */
+.nav-item{
+  line-height:1.15;
+}
+
+/* карточки комнат с кастомными иконками */
+
+.room{
+  min-height:86px;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:14px;
+}
+
+.room::before{
+  content:"";
+  flex:0 0 46px;
+  width:46px;
+  height:46px;
+  border:1px solid rgba(70,216,123,.28);
+  border-radius:14px;
+  background:
+    linear-gradient(180deg, rgba(70,216,123,.12), rgba(0,229,255,.045)),
+    radial-gradient(circle at 50% 50%, rgba(70,216,123,.14), transparent 55%);
+  box-shadow:
+    inset 0 0 14px rgba(0,0,0,.55),
+    0 0 14px rgba(70,216,123,.08);
+}
+
+.room:nth-child(1)::before{
+  content:"☾";
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#d6e88f;
+  font-size:26px;
+}
+
+.room:nth-child(2)::before{
+  content:"⌂";
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#d8b87a;
+  font-size:25px;
+}
+
+.room:nth-child(3)::before{
+  content:"▦";
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#8bd7ff;
+  font-size:25px;
+}
+
+.room:nth-child(4)::before{
+  content:"♡";
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#ff7e95;
+  font-size:25px;
+}
+
+.room > *{
+  flex:1;
+}
+
+.room-name span:first-child::before{
+  content:"";
+}
+
+/* ник в сообщениях чуть внутрь, чтобы не лип к краю */
+
+.nick{
+  padding-left:8px;
+  gap:8px;
+}
+
+.msg.me .nick{
+  justify-content:flex-end;
+  padding-left:0;
+  padding-right:8px;
+}
+
+.msg:not(.me) .nick{
+  justify-content:flex-start;
+}
+
+.msg{
+  padding-top:11px;
+}
+
+.rank{
+  opacity:.82;
+}
+
+/* собственные сообщения чуть менее яркие */
+.msg.me{
+  border-color:rgba(0,229,255,.16);
+  background:
+    linear-gradient(145deg, rgba(0,170,190,.085), rgba(8,20,23,.92));
+}
+
+/* Sabrina/обычные сообщения меньше светят */
+.msg{
+  border-color:rgba(70,216,123,.13);
+}
